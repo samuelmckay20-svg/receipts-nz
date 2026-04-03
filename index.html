@@ -9,6 +9,7 @@
 <title>Receipts NZ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
@@ -91,13 +92,11 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 .g-val { font-size:15px; color:var(--text3); margin-left:auto; text-align:right; }
 /* Toggle: push to right edge */
 .ios-toggle { position:relative; width:51px; height:31px; flex-shrink:0; margin-left:auto; }
-/* Dollar wrap: $ glued directly left of the number, together on the right */
+/* Dollar wrap: $ sits left of the input, both pushed to the right */
 .dollar-wrap { display:flex; align-items:center; gap:0; flex:1; justify-content:flex-end; }
-.dollar-sign { font-size:17px; color:var(--text1); flex-shrink:0; }
-/* Amount input: padding-left creates gap after $ */
-.dollar-wrap .g-input { text-align:left; flex:none; width:110px; padding-left:4px; }
-/* Rate inputs in settings */
-.dollar-wrap .g-input[id^="s-milerate"] { text-align:left; width:70px; }
+.dollar-sign { font-size:17px; color:var(--text1); flex-shrink:0; margin-right:2px; }
+.dollar-wrap .g-input { text-align:right; flex:1; min-width:0; max-width:130px; }
+.dollar-wrap .g-input[id^="s-milerate"] { text-align:left; max-width:70px; }
 
 /* TOGGLE */
 .ios-toggle input { opacity:0; width:0; height:0; position:absolute; }
@@ -276,6 +275,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 .ai-result-err { margin:0 16px 8px; padding:12px 14px; border-radius:12px; background:rgba(255,59,48,.1); color:var(--red); font-size:13px; line-height:1.5; }
 .spinner { display:inline-block; width:15px; height:15px; border:2.5px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .65s linear infinite; }
 @keyframes spin{to{transform:rotate(360deg);}}
+/* Blinking cursor shown on amount display when input is focused */
+.amount-cursor::before { content:'|'; animation:blink .85s step-end infinite; color:var(--blue); margin-right:1px; font-weight:300; }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 </style>
 </head>
 <body>
@@ -307,13 +309,13 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
           <img id="prev-img" class="photo-prev" alt="Receipt" onclick="viewImg(null,'Receipt preview')">
           <button class="photo-expand-btn" onclick="viewImg(null,'Receipt preview')">⛶</button>
         </div>
-        <!-- PDF preview (shown instead of img when PDF uploaded) -->
-        <div id="pdf-prev-wrap" style="display:none;padding:14px 16px;display:none;align-items:center;gap:12px;border-bottom:0.5px solid var(--sep-l);">
-          <div style="width:40px;height:48px;background:rgba(255,59,48,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📄</div>
-          <div style="flex:1;min-width:0;">
-            <div id="pdf-prev-name" style="font-size:14px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">invoice.pdf</div>
-            <div id="pdf-prev-size" style="font-size:12px;color:var(--text3);margin-top:2px;">PDF document</div>
+        <!-- PDF preview - renders page 1 visually -->
+        <div id="pdf-prev-wrap" style="display:none;position:relative;cursor:pointer;" onclick="viewImg(null,'PDF preview')">
+          <canvas id="pdf-prev-canvas" style="width:100%;display:block;max-height:260px;object-fit:contain;background:#f5f5f0;"></canvas>
+          <div style="position:absolute;bottom:10px;right:10px;background:rgba(255,59,48,.9);border-radius:8px;padding:4px 10px;display:flex;align-items:center;gap:5px;">
+            <span style="font-size:11px;color:white;font-weight:700;">PDF</span>
           </div>
+          <div id="pdf-prev-name" style="padding:8px 14px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--sep-l);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--surface);">invoice.pdf</div>
         </div>
         <div class="cap-btns" style="grid-template-columns:1fr 1fr 1fr;">
           <button class="cap-btn" onclick="openCam()">
@@ -370,8 +372,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
         <div class="g-row">
           <div class="g-icon" style="background:rgba(52,199,89,.1)">💵</div>
           <span class="g-lbl">Amount</span>
-          <div class="dollar-wrap"><span class="dollar-sign">$</span>
-            <input class="g-input" type="number" id="f-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="calcLiveGST()">
+          <div class="dollar-wrap">
+            <span id="f-amount-display" style="font-size:17px;color:var(--text4);margin-left:auto;flex-shrink:0;cursor:text;" onclick="document.getElementById('f-amount').focus()">$0.00</span>
+            <input type="number" id="f-amount" step="0.01" min="0" inputmode="decimal" oninput="updateAmountDisplay('f-amount','f-amount-display');calcLiveGST()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
           </div>
         </div>
         <div class="g-row" id="f-gst-calc-row" style="display:none">
@@ -563,12 +566,12 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
         <img id="modal-prev" class="photo-prev" alt="Receipt" onclick="viewImg('edit','')">
         <button class="photo-expand-btn" onclick="viewImg('edit','')">⛶</button>
       </div>
-      <div id="modal-pdf-wrap" style="display:none;padding:14px 16px;align-items:center;gap:12px;border-bottom:0.5px solid var(--sep-l);">
-        <div style="width:40px;height:48px;background:rgba(255,59,48,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📄</div>
-        <div style="flex:1;min-width:0;">
-          <div id="modal-pdf-name" style="font-size:14px;font-weight:600;color:var(--text1);">invoice.pdf</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px;">PDF document</div>
+      <div id="modal-pdf-wrap" style="display:none;position:relative;cursor:pointer;" onclick="viewImg('edit','')">
+        <canvas id="modal-pdf-canvas" style="width:100%;display:block;max-height:220px;object-fit:contain;background:#f5f5f0;"></canvas>
+        <div style="position:absolute;bottom:10px;right:10px;background:rgba(255,59,48,.9);border-radius:8px;padding:4px 10px;">
+          <span style="font-size:11px;color:white;font-weight:700;">PDF</span>
         </div>
+        <div id="modal-pdf-name" style="padding:8px 14px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--sep-l);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--surface);">invoice.pdf</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
         <button class="cap-btn" onclick="openCamEdit()">
@@ -605,8 +608,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
       <div class="g-row">
         <div class="g-icon" style="background:rgba(52,199,89,.1)">💵</div>
         <span class="g-lbl">Amount</span>
-        <div class="dollar-wrap"><span class="dollar-sign">$</span>
-          <input class="g-input" type="number" id="e-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+        <div class="dollar-wrap">
+          <span id="e-amount-display" style="font-size:17px;color:var(--text4);margin-left:auto;flex-shrink:0;cursor:text;" onclick="document.getElementById('e-amount').focus()">$0.00</span>
+          <input type="number" id="e-amount" step="0.01" min="0" inputmode="decimal" oninput="updateAmountDisplay('e-amount','e-amount-display')" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
         </div>
       </div>
       <div class="g-row">
@@ -923,6 +927,33 @@ function updateStats(){
 /* ── HELPERS ── */
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 
+function updateAmountDisplay(inputId, displayId){
+  const val=parseFloat(document.getElementById(inputId).value);
+  const display=document.getElementById(displayId);
+  if(!display)return;
+  if(isNaN(val)||val===0){
+    display.textContent='$0.00';
+    display.style.color='var(--text4)';
+  } else {
+    display.textContent='$'+val.toFixed(2);
+    display.style.color='var(--text1)';
+  }
+}
+
+// Wire focus/blur for blinking cursor on both amount fields
+['f','e'].forEach(prefix=>{
+  const input=document.getElementById(prefix+'-amount');
+  const display=document.getElementById(prefix+'-amount-display');
+  if(!input||!display)return;
+  input.addEventListener('focus',()=>{
+    display.classList.add('amount-cursor');
+  });
+  input.addEventListener('blur',()=>{
+    display.classList.remove('amount-cursor');
+    updateAmountDisplay(prefix+'-amount',prefix+'-amount-display');
+  });
+});
+
 function calcLiveGST(){
   const amount=parseFloat(document.getElementById('f-amount').value)||0;
   const gstMode=document.getElementById('f-gst').value;
@@ -1078,17 +1109,39 @@ function onFile(e){
   reader.readAsDataURL(f);
 }
 
+// Render first page of a PDF data URL onto a canvas element
+async function renderPDFPreview(dataUrl, canvasId){
+  try{
+    if(!window.pdfjsLib) return;
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const b64=dataUrl.split(',')[1];
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+    const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
+    const page=await pdf.getPage(1);
+    const canvas=document.getElementById(canvasId);
+    if(!canvas) return;
+    const vp=page.getViewport({scale:1});
+    const containerW=canvas.parentElement.clientWidth||340;
+    const scale=Math.min(containerW/vp.width, 260/vp.height);
+    const viewport=page.getViewport({scale});
+    canvas.width=viewport.width;
+    canvas.height=viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+  }catch(e){console.warn('PDF preview error:',e);}
+}
+
 function onPDF(e){
   const f=e.target.files[0];
   if(!f||f.type!=='application/pdf')return;
   const r=new FileReader();
-  r.onload=ev=>{
-    imgData=ev.target.result; // stored as base64 data URL, type=application/pdf
-    // Show PDF preview card, hide image preview
+  r.onload=async ev=>{
+    imgData=ev.target.result;
     document.getElementById('prev-wrap').style.display='none';
-    document.getElementById('pdf-prev-wrap').style.display='flex';
-    document.getElementById('pdf-prev-name').textContent=f.name;
-    document.getElementById('pdf-prev-size').textContent=(f.size/1024).toFixed(0)+' KB · PDF';
+    document.getElementById('pdf-prev-wrap').style.display='block';
+    document.getElementById('pdf-prev-name').textContent=f.name+' · '+(f.size/1024).toFixed(0)+' KB';
+    await renderPDFPreview(imgData,'pdf-prev-canvas');
     document.getElementById('retake-row').style.display='block';
     document.getElementById('ai-btn-wrap').style.display='block';
     document.getElementById('ai-result').style.display='none';
@@ -1101,11 +1154,12 @@ function onPDFEdit(e){
   const f=e.target.files[0];
   if(!f||f.type!=='application/pdf')return;
   const r=new FileReader();
-  r.onload=ev=>{
+  r.onload=async ev=>{
     editImgData=ev.target.result;
     document.getElementById('modal-prev-wrap').style.display='none';
-    document.getElementById('modal-pdf-wrap').style.display='flex';
-    document.getElementById('modal-pdf-name').textContent=f.name;
+    document.getElementById('modal-pdf-wrap').style.display='block';
+    document.getElementById('modal-pdf-name').textContent=f.name+' · '+(f.size/1024).toFixed(0)+' KB';
+    await renderPDFPreview(editImgData,'modal-pdf-canvas');
     document.getElementById('modal-retake').style.display='block';
   };
   r.readAsDataURL(f);
@@ -1113,8 +1167,9 @@ function onPDFEdit(e){
 function showPreview(){
   const isPDF=imgData&&imgData.startsWith('data:application/pdf');
   document.getElementById('prev-wrap').style.display=isPDF?'none':'block';
-  document.getElementById('pdf-prev-wrap').style.display=isPDF?'flex':'none';
+  document.getElementById('pdf-prev-wrap').style.display=isPDF?'block':'none';
   if(!isPDF)document.getElementById('prev-img').src=imgData;
+  else renderPDFPreview(imgData,'pdf-prev-canvas');
   document.getElementById('retake-row').style.display='block';
   document.getElementById('ai-btn-wrap').style.display='block';
   document.getElementById('ai-result').style.display='none';
@@ -1134,8 +1189,9 @@ function onFileEdit(e){const f=e.target.files[0];if(!f)return;const r=new FileRe
 function showPreviewEdit(){
   const isPDF=editImgData&&editImgData.startsWith('data:application/pdf');
   document.getElementById('modal-prev-wrap').style.display=isPDF?'none':'block';
-  document.getElementById('modal-pdf-wrap').style.display=isPDF?'flex':'none';
+  document.getElementById('modal-pdf-wrap').style.display=isPDF?'block':'none';
   if(!isPDF)document.getElementById('modal-prev').src=editImgData;
+  else renderPDFPreview(editImgData,'modal-pdf-canvas');
   document.getElementById('modal-retake').style.display='block';
 }
 function clearImgEdit(){
@@ -1286,7 +1342,7 @@ Rules:
     if(!jsonMatch)throw new Error('No JSON in response: '+text.substring(0,100));
     const p=JSON.parse(jsonMatch[0]);
     if(p.vendor)document.getElementById('f-vendor').value=p.vendor;
-    if(p.amount!=null)document.getElementById('f-amount').value=Number(p.amount).toFixed(2);
+    if(p.amount!=null){document.getElementById('f-amount').value=Number(p.amount).toFixed(2);updateAmountDisplay('f-amount','f-amount-display');}
     if(p.date)document.getElementById('f-date').value=p.date;
     if(p.invoice_number)document.getElementById('f-invoice').value=p.invoice_number;
     if(p.supplier_gst)document.getElementById('f-suppgst').value=formatGSTNum(p.supplier_gst);
@@ -1339,6 +1395,7 @@ function saveReceipt(){
   document.getElementById('ai-result').style.display='none';
   document.getElementById('ai-btn-wrap').style.display='none';
   document.getElementById('f-gst-calc-row').style.display='none';
+  
   clearImg();goTab('list');
 }
 
@@ -1347,7 +1404,7 @@ function openEdit(id){
   const r=receipts.find(x=>x.id===id);if(!r)return;
   editId=id;editImgData=r.image||null;editCat=r.category||'other';
   document.getElementById('e-vendor').value=r.vendor;
-  document.getElementById('e-amount').value=r.amount.toFixed(2);
+  document.getElementById('e-amount').value=r.amount.toFixed(2);updateAmountDisplay('e-amount','e-amount-display');
   document.getElementById('e-date').value=r.date;
   document.getElementById('e-gst').value=r.gst;
   document.getElementById('e-invoice').value=r.invoice||'';
