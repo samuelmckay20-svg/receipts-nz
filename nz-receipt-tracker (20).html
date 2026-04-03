@@ -1,0 +1,2160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Receipts">
+<title>Receipts NZ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:root {
+  --safe-top: env(safe-area-inset-top, 44px);
+  --safe-bottom: env(safe-area-inset-bottom, 34px);
+  --accent: #34C759; --accent-dark: #248A3D; --accent-bg: rgba(52,199,89,0.12);
+  --blue: #007AFF; --red: #FF3B30; --orange: #FF9500; --purple: #AF52DE;
+  --bg: #F2F2F7; --surface: #FFFFFF;
+  --text1: #000000; --text2: rgba(60,60,67,0.85); --text3: rgba(60,60,67,0.55); --text4: rgba(60,60,67,0.25);
+  --sep-l: rgba(60,60,67,0.12);
+  --fill2: rgba(120,120,128,0.14); --fill3: rgba(118,118,128,0.10);
+  --warn-bg: rgba(255,149,0,0.10); --warn-text: #7A4500;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #30D158; --accent-dark: #30D158; --accent-bg: rgba(48,209,88,0.15);
+    --blue: #0A84FF; --red: #FF453A; --orange: #FF9F0A; --purple: #BF5AF2;
+    --bg: #000000; --surface: #1C1C1E;
+    --text1: #FFFFFF; --text2: rgba(235,235,245,0.85); --text3: rgba(235,235,245,0.55); --text4: rgba(235,235,245,0.22);
+    --sep-l: rgba(84,84,88,0.32);
+    --fill2: rgba(118,118,128,0.28); --fill3: rgba(118,118,128,0.20);
+    --warn-bg: rgba(255,149,0,0.15); --warn-text: #FFB340;
+  }
+}
+html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-apple-system,'SF Pro Text',system-ui,sans-serif; color:var(--text1); -webkit-font-smoothing:antialiased; }
+/* Desktop/iPad: constrain to a centred column */
+.shell { display:flex; flex-direction:column; height:100%; height:-webkit-fill-available; max-width:600px; margin:0 auto; position:relative; }
+@media (min-width:600px){
+  html,body { background:#e5e5ea; }
+  .shell { box-shadow:0 0 40px rgba(0,0,0,.15); }
+}
+.scroller { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; min-height:0; }
+
+/* NAV */
+.navbar { padding-top:var(--safe-top); background:rgba(242,242,247,0.88); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px); border-bottom:0.5px solid var(--sep-l); flex-shrink:0; z-index:50; position:relative; }
+@media (prefers-color-scheme:dark){ .navbar{background:rgba(0,0,0,0.88);} }
+.navbar-inner { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 12px; }
+.nav-title { font-size:17px; font-weight:600; letter-spacing:-0.4px; }
+.nav-sub { font-size:11px; color:var(--text3); margin-top:1px; }
+.fy-chip { font-size:12px; font-weight:600; padding:5px 12px; border-radius:20px; background:var(--accent-bg); color:var(--accent-dark); white-space:nowrap; }
+@media (prefers-color-scheme:dark){ .fy-chip{color:var(--accent);} }
+.nav-settings-btn { background:none; border:none; font-size:20px; cursor:pointer; padding:2px 0 2px 8px; }
+
+/* SUMMARY */
+.sum-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:14px 16px 8px; }
+.sum-card { background:var(--surface); border-radius:14px; padding:12px 12px 10px; }
+.sum-lbl { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:5px; }
+.sum-val { font-size:18px; font-weight:700; letter-spacing:-0.5px; font-variant-numeric:tabular-nums; }
+.green { color:var(--accent-dark); } @media (prefers-color-scheme:dark){.green{color:var(--accent);}}
+.amber { color:var(--orange); }
+.purple { color:var(--purple); }
+
+.shdr { font-size:13px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; padding:18px 20px 8px; }
+.shdr-row { display:flex; align-items:center; justify-content:space-between; padding:18px 16px 8px; }
+.shdr-row .shdr { padding:0; }
+.shdr-btn { font-size:13px; color:var(--blue); background:none; border:none; cursor:pointer; font-family:inherit; font-weight:500; }
+
+/* IOS LIST */
+.g-list { background:var(--surface); border-radius:12px; margin:0 16px 12px; overflow:hidden; }
+.g-row { display:flex; align-items:center; padding:12px 16px; min-height:52px; gap:12px; position:relative; }
+.g-row+.g-row::before { content:''; position:absolute; top:0; left:56px; right:0; height:0.5px; background:var(--sep-l); }
+.g-row.no-icon+.g-row.no-icon::before { left:16px; }
+.g-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+/* Label: fixed width, always left-aligned */
+.g-lbl { font-size:15px; color:var(--text2); flex-shrink:0; width:110px; text-align:left; }
+.g-lbl-sm { font-size:13px; color:var(--text3); flex-shrink:0; }
+/* Input: fills remaining space, value always right-aligned */
+.g-input { background:none; border:none; outline:none; font-family:inherit; font-size:17px; color:var(--text1); text-align:right; flex:1; min-width:0; max-width:100%; padding:0; }
+.g-input::placeholder { color:var(--text4); }
+.g-input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
+/* Date: wrap in a right-aligned container since iOS ignores text-align on date inputs */
+.g-input[type=date] { text-align:right; display:block; }
+.g-input-sm { font-size:15px; }
+/* Select: right-aligned */
+.g-select { background:none; border:none; outline:none; font-family:inherit; font-size:15px; color:var(--blue); -webkit-appearance:none; appearance:none; text-align:right; text-align-last:right; cursor:pointer; flex:1; min-width:0; direction:rtl; unicode-bidi:embed; }
+.g-select option { direction:ltr; }
+.g-textarea { background:none; border:none; outline:none; font-family:inherit; font-size:15px; color:var(--text1); width:100%; resize:none; min-height:56px; padding:0; line-height:1.5; }
+.g-textarea::placeholder { color:var(--text4); }
+.g-col { flex-direction:column; align-items:flex-start; gap:6px; padding-bottom:14px; }
+.g-val { font-size:15px; color:var(--text3); margin-left:auto; text-align:right; }
+/* Toggle: push to right edge */
+.ios-toggle { position:relative; width:51px; height:31px; flex-shrink:0; margin-left:auto; }
+/* Dollar wrap: $ glued directly left of the number, together on the right */
+.dollar-wrap { display:flex; align-items:center; gap:0; flex:1; justify-content:flex-end; }
+.dollar-sign { font-size:17px; color:var(--text1); flex-shrink:0; }
+/* Amount input: padding-left creates gap after $ */
+.dollar-wrap .g-input { text-align:left; flex:none; width:110px; padding-left:4px; }
+/* Rate inputs in settings */
+.dollar-wrap .g-input[id^="s-milerate"] { text-align:left; width:70px; }
+
+/* TOGGLE */
+.ios-toggle input { opacity:0; width:0; height:0; position:absolute; }
+.ios-toggle-track { position:absolute; inset:0; border-radius:16px; background:#ccc; transition:background .2s; cursor:pointer; }
+.ios-toggle input:checked + .ios-toggle-track { background:var(--accent); }
+.ios-toggle-thumb { position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:white; box-shadow:0 1px 4px rgba(0,0,0,0.3); transition:transform .2s; pointer-events:none; }
+.ios-toggle input:checked ~ .ios-toggle-thumb { transform:translateX(20px); }
+
+/* WARN BANNER */
+.warn-banner { background:var(--warn-bg); border-radius:10px; margin:0 16px 10px; padding:10px 13px; display:flex; gap:9px; align-items:flex-start; }
+.warn-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
+.warn-text { font-size:13px; color:var(--warn-text); line-height:1.5; }
+.warn-text strong { font-weight:600; }
+
+/* CAPTURE */
+.capture-card { margin:0 16px 8px; background:var(--surface); border-radius:16px; overflow:hidden; }
+.photo-prev-wrap { position:relative; }
+.photo-prev { width:100%; height:200px; object-fit:cover; display:block; cursor:pointer; }
+.photo-expand-btn { position:absolute; bottom:10px; right:10px; width:36px; height:36px; border-radius:50%; background:rgba(0,0,0,0.55); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); border:none; color:white; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.cap-btns { display:grid; grid-template-columns:1fr 1fr; }
+.cap-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:18px; border:none; background:none; cursor:pointer; font-family:inherit; position:relative; overflow:hidden; transition:background .15s; }
+.cap-btn:active { background:var(--fill2); }
+.cap-btn+.cap-btn { border-left:0.5px solid var(--sep-l); }
+.cap-btn input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.cap-btn-ico { width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; }
+.cap-btn-name { font-size:13px; font-weight:600; color:var(--text1); }
+.cap-btn-sub { font-size:11px; color:var(--text3); }
+.retake-row { border-top:0.5px solid var(--sep-l); }
+.retake-btn { width:100%; padding:14px; border:none; background:none; font-family:inherit; font-size:14px; font-weight:600; color:var(--red); cursor:pointer; }
+
+/* CATS */
+.cat-scroll { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:0 16px 4px; }
+.cat-chip { display:flex; flex-direction:column; align-items:center; gap:5px; padding:10px 8px; border-radius:14px; border:none; background:var(--surface); cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .15s; width:100%; }
+.cat-chip.on { background:var(--accent-bg); outline:1.5px solid var(--accent); }
+.cat-ico { font-size:20px; }
+.cat-lbl { font-size:10px; font-weight:500; color:var(--text2); text-align:center; white-space:normal; line-height:1.2; }
+.cat-chip.on .cat-lbl { color:var(--accent-dark); }
+@media (prefers-color-scheme:dark){ .cat-chip.on .cat-lbl{color:var(--accent);} }
+
+/* BUTTONS */
+.save-btn { display:block; width:calc(100% - 32px); margin:8px 16px 0; padding:15px; border-radius:14px; border:none; background:var(--blue); color:white; font-family:inherit; font-size:17px; font-weight:700; cursor:pointer; transition:opacity .15s; }
+.save-btn:active { opacity:.8; }
+.del-btn { display:block; width:calc(100% - 32px); margin:10px 16px 0; padding:15px; border-radius:14px; border:none; background:rgba(255,59,48,0.1); color:var(--red); font-family:inherit; font-size:17px; font-weight:600; cursor:pointer; }
+
+/* LIST */
+.filt-row { display:flex; gap:7px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:8px 16px 4px; scrollbar-width:none; }
+.filt-row::-webkit-scrollbar { display:none; }
+.f-pill { padding:6px 14px; border-radius:20px; border:none; background:var(--fill2); font-family:inherit; font-size:13px; font-weight:500; color:var(--text2); cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.f-pill.on { background:var(--accent); color:white; }
+.exp-row { padding:4px 16px 10px; display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex-wrap:nowrap; align-items:center; }
+.exp-row::-webkit-scrollbar { display:none; }
+.exp-btn { display:flex; align-items:center; gap:4px; padding:7px 12px; border-radius:20px; border:none; background:var(--fill2); font-family:inherit; font-size:12px; font-weight:600; color:var(--blue); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:opacity .15s; }
+.exp-btn:active { opacity:.7; }
+.exp-btn:disabled { opacity:.45; cursor:wait; }
+.exp-btn.grn { color:var(--accent-dark); } @media(prefers-color-scheme:dark){.exp-btn.grn{color:var(--accent);}}
+
+.r-card { display:flex; align-items:stretch; background:var(--surface); border-radius:16px; margin:0 16px 10px; overflow:hidden; cursor:pointer; transition:opacity .15s; }
+.r-card:active { opacity:.75; }
+.r-thumb { width:56px; flex-shrink:0; position:relative; }
+.r-thumb img { width:56px; height:100%; object-fit:cover; display:block; }
+.r-thumb-ph { width:56px; display:flex; align-items:center; justify-content:center; font-size:22px; background:var(--fill3); }
+.r-body { flex:1; padding:13px 12px; min-width:0; }
+.r-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:5px; }
+.r-name { font-size:15px; font-weight:600; letter-spacing:-0.3px; }
+.r-amt { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.5px; flex-shrink:0; }
+.r-tags { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.r-date { font-size:12px; color:var(--text3); }
+.r-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; }
+.r-notes { font-size:12px; color:var(--text3); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.r-chevron { display:flex; align-items:center; padding:0 14px 0 4px; color:var(--text4); font-size:18px; }
+.r-recon { width:10px; height:10px; border-radius:50%; background:var(--fill2); flex-shrink:0; margin-right:4px; }
+.r-recon.done { background:var(--accent); }
+
+/* MILEAGE */
+.mile-card { background:var(--surface); border-radius:16px; margin:0 16px 10px; overflow:hidden; display:flex; align-items:center; gap:12px; padding:13px 14px; cursor:pointer; }
+.mile-card:active { opacity:.75; }
+.mile-icon { width:40px; height:40px; border-radius:10px; background:rgba(0,122,255,0.1); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.mile-body { flex:1; min-width:0; }
+.mile-route { font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mile-meta { font-size:12px; color:var(--text3); margin-top:2px; }
+.mile-km { font-size:17px; font-weight:700; color:var(--blue); font-variant-numeric:tabular-nums; flex-shrink:0; }
+
+/* GST PERIOD SELECTOR */
+.period-scroll { display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:0 16px 4px; scrollbar-width:none; }
+.period-scroll::-webkit-scrollbar { display:none; }
+.period-chip { padding:8px 16px; border-radius:20px; border:none; background:var(--fill2); font-family:inherit; font-size:13px; font-weight:500; color:var(--text2); cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.period-chip.on { background:var(--blue); color:white; font-weight:600; }
+
+/* GST RETURN SUMMARY CARD */
+.gst-return-card { background:var(--surface); border-radius:16px; margin:0 16px 12px; overflow:hidden; }
+.gst-section-hdr { background:var(--fill3); padding:10px 16px; font-size:12px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; border-bottom:0.5px solid var(--sep-l); }
+.gst-line { display:flex; justify-content:space-between; align-items:center; padding:11px 16px; font-size:15px; border-bottom:0.5px solid var(--sep-l); }
+.gst-line:last-child { border-bottom:none; }
+.gst-line .lbl { color:var(--text2); }
+.gst-line .box-num { font-size:11px; font-weight:700; color:var(--text4); margin-right:6px; }
+.gst-line .val { font-weight:600; font-variant-numeric:tabular-nums; }
+.gst-line.total { background:var(--accent-bg); }
+.gst-line.total .lbl { color:var(--accent-dark); font-weight:700; }
+.gst-line.total .val { color:var(--accent-dark); font-size:17px; }
+@media(prefers-color-scheme:dark){ .gst-line.total .lbl,.gst-line.total .val{color:var(--accent);} }
+.gst-line.payable { background:rgba(255,59,48,0.08); }
+.gst-line.payable .lbl { color:var(--red); font-weight:700; }
+.gst-line.payable .val { color:var(--red); font-size:17px; }
+.gst-note-box { margin:0 16px 12px; padding:11px 14px; background:var(--fill3); border-radius:10px; font-size:12px; color:var(--text3); line-height:1.6; }
+
+/* CHARTS */
+.chart-card { background:var(--surface); border-radius:16px; margin:0 16px 12px; padding:16px; }
+.bar-row { display:flex; gap:4px; align-items:flex-end; height:76px; }
+.b-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%; justify-content:flex-end; }
+.b-bar { width:100%; border-radius:4px 4px 0 0; background:var(--fill2); min-height:2px; }
+.b-bar.cur { background:var(--accent); }
+.b-lbl { font-size:8px; color:var(--text3); font-weight:500; }
+.cb-row { margin-bottom:11px; }
+.cb-hdr { display:flex; justify-content:space-between; margin-bottom:5px; }
+.cb-name { font-size:14px; }
+.cb-val { font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; }
+.cb-bg { height:7px; background:var(--fill2); border-radius:4px; overflow:hidden; }
+.cb-fill { height:100%; border-radius:4px; }
+
+/* TABBAR */
+.tabbar { background:rgba(242,242,247,0.92); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px); border-top:0.5px solid var(--sep-l); display:flex; padding-bottom:var(--safe-bottom); flex-shrink:0; position:relative; z-index:100; }
+@media(prefers-color-scheme:dark){ .tabbar{background:rgba(0,0,0,0.92);} }
+.tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px 4px; border:none; background:none; cursor:pointer; font-family:inherit; color:var(--text3); }
+.tab.on { color:var(--accent); }
+.tab-ico { font-size:22px; line-height:1; }
+.tab-lbl { font-size:10px; font-weight:600; }
+
+/* CAMERA */
+.cam-wrap { display:none; position:fixed; inset:0; background:#000; z-index:9999; flex-direction:column; }
+.cam-wrap.open { display:flex; }
+.cam-top { position:absolute; top:0; left:0; right:0; z-index:2; padding:calc(var(--safe-top) + 8px) 20px 14px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(rgba(0,0,0,.5),transparent); }
+.cam-video { flex:1; object-fit:cover; width:100%; display:block; }
+.cam-guide { position:absolute; inset:60px 20px; border:2px solid rgba(255,255,255,.45); border-radius:14px; pointer-events:none; }
+.cam-bottom { position:absolute; bottom:0; left:0; right:0; padding:20px 44px calc(var(--safe-bottom) + 24px); display:flex; align-items:center; justify-content:space-between; background:linear-gradient(transparent,rgba(0,0,0,.65)); }
+.cam-ctrl { width:48px; height:48px; border-radius:50%; border:none; background:rgba(255,255,255,.18); color:white; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.shutter { width:76px; height:76px; border-radius:50%; border:4px solid white; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.shutter-in { width:62px; height:62px; border-radius:50%; background:white; transition:transform .1s; }
+.shutter:active .shutter-in { transform:scale(.86); }
+
+/* MODALS */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+.modal-bg.open { display:block; }
+.modal { position:fixed; bottom:0; left:0; right:0; z-index:201; background:var(--bg); border-radius:24px 24px 0 0; padding-bottom:var(--safe-bottom); max-height:calc(100vh - var(--safe-top) - 16px); overflow-y:auto; -webkit-overflow-scrolling:touch; transform:translateY(100%); transition:transform .3s cubic-bezier(.32,1,.23,1); }
+.modal.open { transform:translateY(0); }
+.modal-handle { width:36px; height:5px; border-radius:3px; background:var(--fill2); margin:8px auto 0; display:block; }
+.modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 20px 10px; border-bottom:0.5px solid var(--sep-l); background:var(--bg); position:sticky; top:-1px; z-index:10; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+.modal-title { font-size:17px; font-weight:700; letter-spacing:-0.4px; }
+.modal-close { font-size:15px; font-weight:600; color:var(--blue); background:none; border:none; cursor:pointer; font-family:inherit; }
+
+/* VIEWER */
+.img-viewer { display:none; position:fixed; inset:0; z-index:10000; background:#000; flex-direction:column; align-items:center; justify-content:center; }
+.img-viewer.open { display:flex; }
+.img-viewer-top { position:absolute; top:0; left:0; right:0; padding:calc(var(--safe-top) + 10px) 16px 14px; display:flex; justify-content:flex-end; background:linear-gradient(rgba(0,0,0,.6),transparent); z-index:2; }
+.img-viewer-close { width:36px; height:36px; border-radius:50%; border:none; background:rgba(255,255,255,.18); color:white; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.img-viewer-img { max-width:100%; max-height:100%; object-fit:contain; touch-action:pinch-zoom; user-select:none; -webkit-user-select:none; }
+.img-viewer-bottom { position:absolute; bottom:0; left:0; right:0; padding:14px 20px calc(var(--safe-bottom) + 14px); background:linear-gradient(transparent,rgba(0,0,0,.6)); z-index:2; }
+.img-viewer-caption { color:rgba(255,255,255,.8); font-size:14px; font-weight:500; text-align:center; }
+.img-viewer-sub { color:rgba(255,255,255,.45); font-size:12px; text-align:center; margin-top:3px; }
+
+/* TOAST */
+.toast { position:fixed; bottom:calc(var(--safe-bottom) + 80px); left:50%; transform:translateX(-50%) translateY(20px); background:rgba(0,0,0,0.82); color:white; padding:10px 20px; border-radius:20px; font-size:13px; font-weight:500; z-index:9000; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+.pb { height:calc(var(--safe-bottom) + 28px); }
+.empty { text-align:center; padding:60px 24px; }
+.empty-ico { font-size:56px; margin-bottom:12px; }
+.empty-title { font-size:20px; font-weight:700; letter-spacing:-0.5px; margin-bottom:6px; }
+.empty-sub { font-size:14px; color:var(--text3); line-height:1.55; }
+
+/* AI ANALYSER */
+.ai-btn { display:block; width:calc(100% - 32px); margin:0 16px 8px; padding:14px; border-radius:14px; border:none; background:linear-gradient(135deg,#5856D6,#007AFF); color:white; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:opacity .15s; }
+.ai-btn:active { opacity:.8; }
+.ai-btn:disabled { opacity:.45; }
+.ai-result-ok { margin:0 16px 8px; padding:12px 14px; border-radius:12px; background:var(--accent-bg); color:var(--accent-dark); font-size:13px; line-height:1.5; }
+@media(prefers-color-scheme:dark){.ai-result-ok{color:var(--accent);}}
+.ai-result-err { margin:0 16px 8px; padding:12px 14px; border-radius:12px; background:rgba(255,59,48,.1); color:var(--red); font-size:13px; line-height:1.5; }
+.spinner { display:inline-block; width:15px; height:15px; border:2.5px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .65s linear infinite; }
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div>
+        <div class="nav-title">Receipts NZ</div>
+        <div class="nav-sub" id="fy-sub"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="fy-chip" id="fy-chip"></div>
+        <button class="nav-settings-btn" onclick="openSettings()" title="Settings">⚙️</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroller" id="scroller">
+    <div class="sum-row">
+      <div class="sum-card"><div class="sum-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
+      <div class="sum-card"><div class="sum-lbl">GST back</div><div class="sum-val amber" id="s-gst">$0.00</div></div>
+      <div class="sum-card"><div class="sum-lbl">Reconciled</div><div class="sum-val" id="s-recon">0/0</div></div>
+    </div>
+
+    <!-- ADD PANEL -->
+    <div id="p-add">
+      <div class="capture-card">
+        <div class="photo-prev-wrap" id="prev-wrap" style="display:none">
+          <img id="prev-img" class="photo-prev" alt="Receipt" onclick="viewImg(null,'Receipt preview')">
+          <button class="photo-expand-btn" onclick="viewImg(null,'Receipt preview')">⛶</button>
+        </div>
+        <!-- PDF preview (shown instead of img when PDF uploaded) -->
+        <div id="pdf-prev-wrap" style="display:none;padding:14px 16px;display:none;align-items:center;gap:12px;border-bottom:0.5px solid var(--sep-l);">
+          <div style="width:40px;height:48px;background:rgba(255,59,48,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📄</div>
+          <div style="flex:1;min-width:0;">
+            <div id="pdf-prev-name" style="font-size:14px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">invoice.pdf</div>
+            <div id="pdf-prev-size" style="font-size:12px;color:var(--text3);margin-top:2px;">PDF document</div>
+          </div>
+        </div>
+        <div class="cap-btns" style="grid-template-columns:1fr 1fr 1fr;">
+          <button class="cap-btn" onclick="openCam()">
+            <div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>
+            <div class="cap-btn-name">Camera</div>
+            <div class="cap-btn-sub">Take photo</div>
+          </button>
+          <button class="cap-btn">
+            <input type="file" accept="image/*" id="file-in" onchange="onFile(event)">
+            <div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>
+            <div class="cap-btn-name">Photo</div>
+            <div class="cap-btn-sub">From library</div>
+          </button>
+          <button class="cap-btn">
+            <input type="file" accept="application/pdf" id="pdf-in" onchange="onPDF(event)">
+            <div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>
+            <div class="cap-btn-name">PDF</div>
+            <div class="cap-btn-sub">Invoice / doc</div>
+          </button>
+        </div>
+        <div class="retake-row" id="retake-row" style="display:none">
+          <button class="retake-btn" onclick="clearImg()">Remove file</button>
+        </div>
+      </div>
+
+      <!-- AI ANALYSE BUTTON (shown after photo added) -->
+      <div id="ai-btn-wrap" style="display:none">
+        <!-- API key setup — hidden once key is saved -->
+        <div id="api-key-setup" style="display:none;margin:0 16px 8px;background:var(--surface);border-radius:14px;padding:14px;">
+          <p style="font-size:13px;color:var(--text3);line-height:1.55;margin-bottom:10px;">🔑 <strong style="color:var(--text2)">Anthropic API key required</strong><br>Get a free key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);text-decoration:none;">console.anthropic.com</a> — costs ~$0.003 per scan.</p>
+          <div style="display:flex;gap:8px;">
+            <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." style="flex:1;padding:10px 12px;border-radius:10px;border:0.5px solid var(--sep-l);background:var(--fill3);font-family:monospace;font-size:12px;color:var(--text1);outline:none;">
+            <button onclick="saveApiKey()" style="padding:10px 16px;border-radius:10px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">Save</button>
+          </div>
+        </div>
+        <button class="ai-btn" id="ai-btn" onclick="analyseReceipt()">
+          <span>✦</span> Analyse with AI
+        </button>
+      </div>
+      <div id="ai-result" style="display:none"></div>
+
+      <div id="ent-warn" class="warn-banner" style="display:none">
+        <span class="warn-icon">⚠️</span>
+        <span class="warn-text"><strong>Entertainment rule:</strong> Meals & entertainment are only <strong>50% deductible</strong> under NZ tax law. The claimable GST has been halved automatically.</span>
+      </div>
+
+      <div class="shdr">Details</div>
+      <div class="g-list">
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(0,122,255,.1)">🏪</div>
+          <span class="g-lbl">Vendor</span>
+          <input class="g-input" type="text" id="f-vendor" placeholder="e.g. Countdown">
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(52,199,89,.1)">💵</div>
+          <span class="g-lbl">Amount</span>
+          <div class="dollar-wrap"><span class="dollar-sign">$</span>
+            <input class="g-input" type="number" id="f-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="calcLiveGST()">
+          </div>
+        </div>
+        <div class="g-row" id="f-gst-calc-row" style="display:none">
+          <div class="g-icon" style="background:rgba(255,149,0,.06)">🧮</div>
+          <span class="g-lbl" style="color:var(--text3);font-size:13px;">GST included</span>
+          <span id="f-gst-calc" style="font-size:15px;font-weight:600;color:var(--orange);margin-left:auto;">$0.00</span>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(255,149,0,.1)">📅</div>
+          <span class="g-lbl">Date</span>
+          <div style="margin-left:auto;flex-shrink:0;"><input class="g-input" type="date" id="f-date" style="display:block;"></div>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(175,82,222,.1)">🧾</div>
+          <span class="g-lbl">GST</span>
+          <select class="g-select" id="f-gst" onchange="calcLiveGST()">
+            <option value="yes">Yes — included</option>
+            <option value="no">No GST</option>
+            <option value="partial">Partial (50%)</option>
+          </select>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(255,59,48,.08)">🏷️</div>
+          <span class="g-lbl">Invoice #</span>
+          <input class="g-input g-input-sm" type="text" id="f-invoice" placeholder="Optional">
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(90,200,250,.12)">🏢</div>
+          <span class="g-lbl">Supplier GST#</span>
+          <input class="g-input g-input-sm" type="text" id="f-suppgst" placeholder="e.g. 123-456-789" oninput="onGSTInput(this)" inputmode="numeric">
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(52,199,89,.1)">✅</div>
+          <span class="g-lbl">Reconciled</span>
+          <label class="ios-toggle"><input type="checkbox" id="f-recon"><div class="ios-toggle-track"></div><div class="ios-toggle-thumb"></div></label>
+        </div>
+        <div class="g-row g-col">
+          <span style="font-size:13px;color:var(--text3);font-weight:500">Business purpose</span>
+          <textarea class="g-textarea" id="f-notes" placeholder="Describe the business purpose of this expense..."></textarea>
+        </div>
+      </div>
+
+      <div class="shdr">Category</div>
+      <div class="cat-scroll" id="cat-scroll"></div>
+      <br>
+      <button class="save-btn" onclick="saveReceipt()">Save Receipt</button>
+      <div class="pb"></div>
+    </div>
+
+    <!-- LIST PANEL -->
+    <div id="p-list" style="display:none">
+      <div class="filt-row" id="filt-row"></div>
+      <div class="exp-row">
+        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Export:</span>
+        <button class="exp-btn grn" id="btn-zip" onclick="exportZip()">📦 ZIP</button>
+        <button class="exp-btn" id="btn-pdf" onclick="exportPDF()">📄 PDF</button>
+        <button class="exp-btn" id="btn-csv" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+      <div id="r-list"></div>
+      <div class="empty" id="r-empty" style="display:none">
+        <div class="empty-ico">🧾</div>
+        <div class="empty-title">No receipts yet</div>
+        <div class="empty-sub">Tap Add to photograph or upload your first receipt.</div>
+      </div>
+      <div class="pb"></div>
+    </div>
+
+    <!-- MILEAGE PANEL -->
+    <div id="p-mile" style="display:none">
+      <div class="g-list" style="margin:14px 16px 12px;">
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(88,86,214,.1)">⛽</div>
+          <span class="g-lbl">Rate</span>
+          <span class="g-val" id="mile-rate-display">$1.17/km</span>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(52,199,89,.1)">📊</div>
+          <span class="g-lbl">Total km (FY)</span>
+          <span class="g-val" id="mile-total-km">0 km</span>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(175,82,222,.1)">💰</div>
+          <span class="g-lbl">Total claimable</span>
+          <span class="g-val green" id="mile-total-val">$0.00</span>
+        </div>
+      </div>
+      <button class="save-btn" style="background:var(--blue);margin-bottom:12px;" onclick="openMileModal(null)">+ Log a trip</button>
+      <div id="mile-list"></div>
+      <div class="empty" id="mile-empty" style="display:none">
+        <div class="empty-ico">🚗</div>
+        <div class="empty-title">No trips yet</div>
+        <div class="empty-sub">Tap "Log a trip" to record a business journey.</div>
+      </div>
+      <div class="pb"></div>
+    </div>
+
+    <!-- GST PANEL -->
+    <div id="p-gst" style="display:none">
+      <div class="shdr">GST filing period</div>
+      <div class="period-scroll" id="period-scroll"></div>
+
+      <div class="exp-row" id="period-exp-row" style="display:none">
+        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Period:</span>
+        <button class="exp-btn grn" onclick="exportPeriodZip()">📦 ZIP</button>
+        <button class="exp-btn" onclick="exportPeriodPDF()">📄 PDF</button>
+        <button class="exp-btn" onclick="exportPeriodCSV()">⬇ CSV</button>
+      </div>
+
+      <!-- Income entry for selected period -->
+      <div class="shdr">Your income this period</div>
+      <div class="g-list" style="margin:0 16px 12px;">
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(88,86,214,.1)">🔢</div>
+          <span class="g-lbl">Invoice type</span>
+          <select class="g-select" id="income-mode" onchange="if(document.getElementById('p-gst').style.display!=='none')renderGST()">
+            <option value="exclusive">Fees only — GST added on top</option>
+            <option value="inclusive">Total received — GST already inside</option>
+          </select>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(52,199,89,.1)">💰</div>
+          <span class="g-lbl" id="income-total-lbl">Your fees (ex. GST)</span>
+          <span style="font-size:17px;color:var(--text1);flex-shrink:0;">$</span>
+          <input class="g-input" type="number" id="income-total" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="if(document.getElementById('p-gst').style.display!=='none')renderGST()" >
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(255,149,0,.1)">🧾</div>
+          <span class="g-lbl">GST collected</span>
+          <span style="font-size:17px;color:var(--text3);flex-shrink:0;">$</span>
+          <input class="g-input" type="number" id="income-gst" placeholder="auto" step="0.01" min="0" inputmode="decimal" readonly style="color:var(--text3);">
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(0,122,255,.1)">📊</div>
+          <span class="g-lbl">Zero-rated</span>
+          <span style="font-size:17px;color:var(--text1);flex-shrink:0;">$</span>
+          <input class="g-input" type="number" id="income-zero" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="if(document.getElementById('p-gst').style.display!=='none')renderGST()" >
+        </div>
+      </div>
+      <div class="gst-note-box" style="margin:0 16px 12px;" id="income-hint">Enter your fee total (before GST). GST collected = fees × 15%. Zero-rated applies to exports or exempt supplies.</div>
+
+      <div id="gst-return-wrap" style="margin-top:8px;"></div>
+
+      <div class="shdr">Monthly spending</div>
+      <div class="chart-card"><div class="bar-row" id="bar-row"></div></div>
+      <div class="shdr">By category</div>
+      <div class="chart-card" id="cat-chart"></div>
+      <div class="pb"></div>
+    </div>
+  </div><!-- scroller -->
+
+  <nav class="tabbar">
+    <button class="tab on" id="t-add" onclick="goTab('add')"><span class="tab-ico">＋</span><span class="tab-lbl">Add</span></button>
+    <button class="tab" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
+    <button class="tab" id="t-mile" onclick="goTab('mile')"><span class="tab-ico">🚗</span><span class="tab-lbl">Mileage</span></button>
+    <button class="tab" id="t-gst" onclick="goTab('gst')"><span class="tab-ico">📊</span><span class="tab-lbl">GST</span></button>
+  </nav>
+</div>
+
+<!-- CAMERA -->
+<div class="cam-wrap" id="cam-wrap">
+  <div class="cam-top">
+    <button class="cam-ctrl" onclick="closeCam()">✕</button>
+    <span style="color:rgba(255,255,255,.7);font-size:13px;font-weight:500">Align receipt in frame</span>
+    <button class="cam-ctrl" onclick="flipCam()">↺</button>
+  </div>
+  <video class="cam-video" id="cam-video" autoplay playsinline muted></video>
+  <canvas id="snap-canvas" style="display:none"></canvas>
+  <div class="cam-guide"></div>
+  <div class="cam-bottom">
+    <div style="width:48px"></div>
+    <button class="shutter" onclick="snapPhoto()"><div class="shutter-in"></div></button>
+    <div style="width:48px"></div>
+  </div>
+</div>
+
+<!-- EDIT RECEIPT MODAL -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal('edit')"></div>
+<div class="modal" id="modal-edit">
+  <div class="modal-hdr">
+    <div class="modal-handle" style="margin:8px auto 4px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 8px;">
+      <div class="modal-title"></div>
+      <button class="modal-close" onclick="closeModal('edit')">← Back</button>
+    </div>
+  </div>
+  <div style="padding:0 0 8px;">
+    <div style="margin:0 16px 8px;background:var(--surface);border-radius:16px;overflow:hidden;">
+      <div class="photo-prev-wrap" id="modal-prev-wrap" style="display:none">
+        <img id="modal-prev" class="photo-prev" alt="Receipt" onclick="viewImg('edit','')">
+        <button class="photo-expand-btn" onclick="viewImg('edit','')">⛶</button>
+      </div>
+      <div id="modal-pdf-wrap" style="display:none;padding:14px 16px;align-items:center;gap:12px;border-bottom:0.5px solid var(--sep-l);">
+        <div style="width:40px;height:48px;background:rgba(255,59,48,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📄</div>
+        <div style="flex:1;min-width:0;">
+          <div id="modal-pdf-name" style="font-size:14px;font-weight:600;color:var(--text1);">invoice.pdf</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">PDF document</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
+        <button class="cap-btn" onclick="openCamEdit()">
+          <div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>
+          <div class="cap-btn-name">Camera</div>
+        </button>
+        <button class="cap-btn">
+          <input type="file" accept="image/*" id="modal-file-in" onchange="onFileEdit(event)">
+          <div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>
+          <div class="cap-btn-name">Photo</div>
+        </button>
+        <button class="cap-btn">
+          <input type="file" accept="application/pdf" id="modal-pdf-in" onchange="onPDFEdit(event)">
+          <div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>
+          <div class="cap-btn-name">PDF</div>
+        </button>
+      </div>
+      <div id="modal-retake" style="display:none;border-top:0.5px solid var(--sep-l);">
+        <button class="retake-btn" onclick="clearImgEdit()">Remove file</button>
+      </div>
+    </div>
+
+    <div id="e-ent-warn" class="warn-banner" style="display:none">
+      <span class="warn-icon">⚠️</span>
+      <span class="warn-text"><strong>Entertainment rule:</strong> Meals & entertainment are only <strong>50% deductible</strong> under NZ tax law.</span>
+    </div>
+
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">🏪</div>
+        <span class="g-lbl">Vendor</span>
+        <input class="g-input" type="text" id="e-vendor" placeholder="e.g. Countdown">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(52,199,89,.1)">💵</div>
+        <span class="g-lbl">Amount</span>
+        <div class="dollar-wrap"><span class="dollar-sign">$</span>
+          <input class="g-input" type="number" id="e-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+        </div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(255,149,0,.1)">📅</div>
+        <span class="g-lbl">Date</span>
+        <div style="margin-left:auto;flex-shrink:0;"><input class="g-input" type="date" id="e-date" style="display:block;"></div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(175,82,222,.1)">🧾</div>
+        <span class="g-lbl">GST</span>
+        <select class="g-select" id="e-gst">
+          <option value="yes">Yes — included</option>
+          <option value="no">No GST</option>
+          <option value="partial">Partial (50%)</option>
+        </select>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(255,59,48,.08)">🏷️</div>
+        <span class="g-lbl">Invoice #</span>
+        <input class="g-input g-input-sm" type="text" id="e-invoice" placeholder="Optional">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(90,200,250,.12)">🏢</div>
+        <span class="g-lbl">Supplier GST#</span>
+        <input class="g-input g-input-sm" type="text" id="e-suppgst" placeholder="e.g. 123-456-789" oninput="onGSTInput(this)" inputmode="numeric">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(52,199,89,.1)">✅</div>
+        <span class="g-lbl">Reconciled</span>
+        <label class="ios-toggle"><input type="checkbox" id="e-recon"><div class="ios-toggle-track"></div><div class="ios-toggle-thumb"></div></label>
+      </div>
+      <div class="g-row g-col">
+        <span style="font-size:13px;color:var(--text3);font-weight:500">Business purpose</span>
+        <textarea class="g-textarea" id="e-notes" placeholder="Describe the business purpose..."></textarea>
+      </div>
+    </div>
+    <div class="shdr" style="padding-top:8px">Category</div>
+    <div class="cat-scroll" id="modal-cat-scroll"></div>
+    <br>
+    <button class="save-btn" onclick="saveEdit()">Save Changes</button>
+    <button class="del-btn" onclick="confirmDelete()">Delete Receipt</button>
+    <div class="pb"></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="settings-bg" onclick="closeModal('settings')"></div>
+<div class="modal" id="modal-settings">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <div class="modal-title">Settings</div>
+    <button class="modal-close" onclick="closeModal('settings')">← Back</button>
+  </div>
+  <div style="padding:0 0 8px;">
+    <div class="shdr">AI receipt scanner</div>
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(88,86,214,.1)">🔑</div>
+        <span class="g-lbl">API key</span>
+        <input class="g-input g-input-sm" type="password" id="s-apikey" placeholder="sk-ant-api03-..." style="font-family:monospace;font-size:12px;">
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 12px;">Get a free key at console.anthropic.com — costs ~$0.003 per receipt scan (~$0.30 for 100 receipts/month).</div>
+    <div class="shdr">Your business</div>
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(52,199,89,.1)">🏢</div>
+        <span class="g-lbl">Business name</span>
+        <input class="g-input g-input-sm" type="text" id="s-bizname" placeholder="Your business">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(255,149,0,.1)">🔢</div>
+        <span class="g-lbl">Your GST #</span>
+        <input class="g-input g-input-sm" type="text" id="s-gstn" placeholder="123-456-789" oninput="onGSTInput(this)" inputmode="numeric">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(175,82,222,.1)">📆</div>
+        <span class="g-lbl">GST period</span>
+        <select class="g-select" id="s-gstperiod">
+          <option value="2">2-monthly (standard)</option>
+          <option value="1">1-monthly</option>
+          <option value="6">6-monthly</option>
+        </select>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">📋</div>
+        <span class="g-lbl">GST basis</span>
+        <select class="g-select" id="s-gstbasis">
+          <option value="invoice">Invoice basis</option>
+          <option value="payments">Payments basis</option>
+        </select>
+      </div>
+    </div>
+    <div class="shdr">Mileage</div>
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">🚗</div>
+        <span class="g-lbl">Vehicle</span>
+        <input class="g-input g-input-sm" type="text" id="s-vehicle" placeholder="e.g. Toyota Corolla">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(88,86,214,.1)">⛽</div>
+        <span class="g-lbl">Fuel type</span>
+        <select class="g-select" id="s-fueltype" onchange="updateMileRateFromType()">
+          <option value="petrol">Petrol — $1.17/km</option>
+          <option value="diesel">Diesel — $1.26/km</option>
+          <option value="hybrid">Petrol Hybrid — $0.86/km</option>
+          <option value="electric">Electric — $1.08/km</option>
+          <option value="custom">Custom rate</option>
+        </select>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(52,199,89,.1)">📏</div>
+        <span class="g-lbl">Tier 1 rate</span>
+        <div class="dollar-wrap">
+          <span class="dollar-sign" style="font-size:15px;">$</span>
+          <input class="g-input g-input-sm" type="number" id="s-milerate" placeholder="1.17" step="0.01" inputmode="decimal">
+          <span style="font-size:14px;color:var(--text3)">/km (first 14,000 km)</span>
+        </div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(255,149,0,.1)">📏</div>
+        <span class="g-lbl">Tier 2 rate</span>
+        <div class="dollar-wrap">
+          <span class="dollar-sign" style="font-size:15px;">$</span>
+          <input class="g-input g-input-sm" type="number" id="s-milerate2" placeholder="0.37" step="0.01" inputmode="decimal">
+          <span style="font-size:14px;color:var(--text3)">/km (after 14,000 km)</span>
+        </div>
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 12px;">2024–25 IRD Tier 1 rates (first 14,000 km): Petrol $1.17 · Diesel $1.26 · Hybrid $0.86 · Electric $1.08. Tier 2 (beyond 14,000 km): Petrol $0.37 · Diesel $0.35 · Hybrid $0.21 · Electric $0.19.</div>
+    <br>
+    <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+    <div class="pb"></div>
+  </div>
+</div>
+
+<!-- MILEAGE ENTRY MODAL -->
+<div class="modal-bg" id="mile-bg" onclick="closeModal('mile')"></div>
+<div class="modal" id="modal-mile">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <div class="modal-title" id="mile-modal-title">Add Trip</div>
+    <button class="modal-close" onclick="closeModal('mile')">← Back</button>
+  </div>
+  <div style="padding:0 0 8px;">
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(255,149,0,.1)">📅</div>
+        <span class="g-lbl">Date</span>
+        <div style="margin-left:auto;flex-shrink:0;"><input class="g-input" type="date" id="m-date" style="display:block;"></div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">🗺️</div>
+        <span class="g-lbl">From</span>
+        <input class="g-input g-input-sm" type="text" id="m-from" placeholder="Starting point">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(52,199,89,.1)">📍</div>
+        <span class="g-lbl">To</span>
+        <input class="g-input g-input-sm" type="text" id="m-to" placeholder="Destination (add on return)">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(175,82,222,.1)">🔢</div>
+        <span class="g-lbl">Odo start</span>
+        <div class="dollar-wrap">
+          <input class="g-input" type="number" id="m-odo-start" placeholder="e.g. 45230" step="1" min="0" inputmode="numeric" oninput="calcOdoKm()">
+          <span style="font-size:15px;color:var(--text3)">km</span>
+        </div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(175,82,222,.1)">🔢</div>
+        <span class="g-lbl">Odo finish</span>
+        <div class="dollar-wrap">
+          <input class="g-input" type="number" id="m-odo-end" placeholder="e.g. 45287" step="1" min="0" inputmode="numeric" oninput="calcOdoKm()">
+          <span style="font-size:15px;color:var(--text3)">km</span>
+        </div>
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(175,82,222,.1)">📏</div>
+        <span class="g-lbl">Distance</span>
+        <div class="dollar-wrap">
+          <input class="g-input" type="number" id="m-km" placeholder="Auto or manual" step="0.1" min="0" inputmode="decimal" >
+          <span style="font-size:15px;color:var(--text3)">km</span>
+        </div>
+      </div>
+      <div class="g-row g-col">
+        <span style="font-size:13px;color:var(--text3);font-weight:500">Business purpose</span>
+        <textarea class="g-textarea" id="m-purpose" placeholder="Why this trip was for business..."></textarea>
+      </div>
+    </div>
+    <br>
+    <div class="gst-note-box" style="margin:0 16px 12px;">💡 <strong>Starting a trip?</strong> Enter the date, from, and odo start — then save. When you return, tap the trip and add the odo finish to complete it.</div>
+    <button class="save-btn" onclick="saveMileage()">Save Trip</button>
+    <button class="del-btn" id="mile-del-btn" style="display:none" onclick="deleteMileage()">Delete Trip</button>
+    <div class="pb"></div>
+  </div>
+</div>
+
+<!-- FULLSCREEN VIEWER -->
+<div class="img-viewer" id="img-viewer">
+  <div class="img-viewer-top">
+    <button class="img-viewer-close" onclick="closeViewer()">✕</button>
+  </div>
+  <img class="img-viewer-img" id="img-viewer-img" alt="Receipt" draggable="false">
+  <div class="img-viewer-bottom">
+    <div class="img-viewer-caption" id="img-viewer-caption"></div>
+    <div class="img-viewer-sub">Pinch to zoom · Tap ✕ to close</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── DATA ── */
+const CATS=[
+  {id:'meals',       label:'Meals & Ent.',    icon:'☕',color:'#FF9500',entertainment:true},
+  {id:'motor',       label:'Motor vehicle',   icon:'🚗',color:'#007AFF',entertainment:false},
+  {id:'travel',      label:'Travel & accom.', icon:'✈️',color:'#5AC8FA',entertainment:false},
+  {id:'phone',       label:'Phone & internet',icon:'📱',color:'#34C759',entertainment:false},
+  {id:'office',      label:'Office & supplies',icon:'📎',color:'#8E8E93',entertainment:false},
+  {id:'software',    label:'Software & SaaS', icon:'💻',color:'#AF52DE',entertainment:false},
+  {id:'professional',label:'Prof. fees',      icon:'⚖️',color:'#FF9F0A',entertainment:false},
+  {id:'rent',        label:'Rent & premises', icon:'🏢',color:'#FF2D55',entertainment:false},
+  {id:'bank',        label:'Bank charges',    icon:'🏦',color:'#8E8E93',entertainment:false},
+  {id:'marketing',   label:'Advertising',     icon:'📣',color:'#BF5AF2',entertainment:false},
+  {id:'other',       label:'Other',           icon:'📁',color:'#8E8E93',entertainment:false},
+];
+
+let receipts=[], mileage=[], selCat='other', editCat='other';
+let imgData=null, editImgData=null, editId=null, editMileId=null;
+let stream=null, facing='environment', camTarget='add';
+let curFilter='all', selPeriodIdx=0;
+
+// Settings
+let settings={bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37};
+
+function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+receipts=load('nzrt5_r',[]);
+mileage=load('nzrt5_m',[]);
+settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37},load('nzrt5_s',{}));
+function save(){
+  try{
+    localStorage.setItem('nzrt5_r',JSON.stringify(receipts));
+    localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
+    localStorage.setItem('nzrt5_s',JSON.stringify(settings));
+  }catch(e){}
+}
+
+/* ── FY ── */
+function getFY(){
+  const n=new Date(),m=n.getMonth()+1,y=n.getFullYear(),sy=m<4?y-1:y;
+  return{start:new Date(sy,3,1),end:new Date(sy+1,2,31),label:`FY ${sy}–${String(sy+1).slice(2)}`,range:`1 Apr ${sy} – 31 Mar ${sy+1}`,startYear:sy};
+}
+const FY=getFY();
+document.getElementById('fy-chip').textContent=FY.label;
+document.getElementById('fy-sub').textContent=FY.range;
+document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
+document.getElementById('m-date').value=new Date().toISOString().split('T')[0];
+
+/* ── GST PERIODS ── */
+function buildGSTPeriods(){
+  const months=parseInt(settings.gstperiod)||2;
+  // build list of periods within current FY (Apr to Mar)
+  const periods=[];
+  let d=new Date(FY.start);
+  while(d<=FY.end){
+    const start=new Date(d);
+    const end=new Date(d);
+    end.setMonth(end.getMonth()+months);
+    end.setDate(0); // last day of previous month
+    if(end>FY.end)end.setTime(FY.end.getTime());
+    periods.push({start:new Date(start),end:new Date(end)});
+    d.setMonth(d.getMonth()+months);
+  }
+  return periods;
+}
+
+function fmtPeriod(p){
+  const opts={month:'short',year:'numeric'};
+  return p.start.toLocaleDateString('en-NZ',opts)+' – '+p.end.toLocaleDateString('en-NZ',opts);
+}
+
+/* ── GST CALCULATION ── */
+function gstForReceipt(r){
+  const cat=CATS.find(c=>c.id===r.category);
+  const isEnt=cat&&cat.entertainment;
+  if(r.gst==='no') return 0;
+  // NZ GST 15%: GST component = amount × 3/23 (i.e. 15/115)
+  const raw=r.gst==='partial'?r.amount*(3/23)*0.5:r.amount*(3/23);
+  return isEnt?raw*0.5:raw; // entertainment 50% rule
+}
+
+function claimableForReceipt(r){
+  const cat=CATS.find(c=>c.id===r.category);
+  const isEnt=cat&&cat.entertainment;
+  if(isEnt) return r.amount*0.5;
+  return r.amount;
+}
+
+/* ── STATS ── */
+function updateStats(){
+  try{
+    const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+    const claimable=fyR.reduce((s,r)=>s+claimableForReceipt(r),0);
+    const gst=fyR.reduce((s,r)=>s+gstForReceipt(r),0);
+    const recon=fyR.filter(r=>r.reconciled).length;
+    document.getElementById('s-total').textContent='$'+claimable.toFixed(2);
+    document.getElementById('s-gst').textContent='$'+gst.toFixed(2);
+    document.getElementById('s-recon').textContent=recon+'/'+fyR.length;
+  }catch(e){console.error('updateStats error:',e);}
+}
+
+/* ── HELPERS ── */
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+
+function calcLiveGST(){
+  const amount=parseFloat(document.getElementById('f-amount').value)||0;
+  const gstMode=document.getElementById('f-gst').value;
+  const row=document.getElementById('f-gst-calc-row');
+  const display=document.getElementById('f-gst-calc');
+  if(amount<=0||gstMode==='no'){row.style.display='none';return;}
+  let gst;
+  if(gstMode==='yes') gst=amount*(3/23);
+  else if(gstMode==='partial') gst=amount*(3/23)*0.5;
+  else{row.style.display='none';return;}
+  // Check if entertainment category (50% rule)
+  const cat=CATS.find(c=>c.id===selCat);
+  if(cat&&cat.entertainment) gst=gst*0.5;
+  display.textContent='$'+gst.toFixed(2);
+  row.style.display='flex';
+}
+
+// NZ IRD/GST numbers: 8 digits = XX-XXX-XXX, 9 digits = XXX-XXX-XXX
+function formatGSTNum(val){
+  const digits=val.replace(/\D/g,'');
+  if(digits.length<=3) return digits;
+  if(digits.length<=6) return digits.slice(0,digits.length-3)+'-'+digits.slice(-3);
+  if(digits.length<=8) return digits.slice(0,digits.length-6)+'-'+digits.slice(-6,-3)+'-'+digits.slice(-3);
+  // 9 digits
+  return digits.slice(0,3)+'-'+digits.slice(3,6)+'-'+digits.slice(6,9);
+}
+function onGSTInput(el){
+  const pos=el.selectionStart;
+  const old=el.value;
+  const formatted=formatGSTNum(old);
+  el.value=formatted;
+  // Restore cursor position roughly
+  try{el.setSelectionRange(pos+(formatted.length-old.length),pos+(formatted.length-old.length));}catch(e){}
+}
+function fmtDate(d){return new Date(d+'T12:00:00').toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'});}
+function catBy(id){return CATS.find(c=>c.id===id)||CATS[CATS.length-1];}
+
+/* ── CATS ── */
+function buildCats(cid,selId,cb,watchEnt){
+  document.getElementById(cid).innerHTML=CATS.map(c=>
+    `<button class="cat-chip${c.id===selId?' on':''}" onclick="${cb}('${c.id}',${!!watchEnt})">`+
+    `<span class="cat-ico">${c.icon}</span><span class="cat-lbl">${c.label}</span></button>`
+  ).join('');
+}
+buildCats('cat-scroll','other','pickCat',true);
+function pickCat(id,watchEnt){selCat=id;buildCats('cat-scroll',selCat,'pickCat',true);if(watchEnt)updateEntWarn('ent-warn',id);calcLiveGST();}
+function pickCatEdit(id){editCat=id;buildCats('modal-cat-scroll',editCat,'pickCatEdit',false);updateEntWarn('e-ent-warn',id);}
+
+function updateEntWarn(warnId,catId){
+  const cat=CATS.find(c=>c.id===catId);
+  document.getElementById(warnId).style.display=(cat&&cat.entertainment)?'flex':'none';
+}
+
+/* ── TABS ── */
+function goTab(t){
+  ['add','list','mile','gst'].forEach(n=>{
+    document.getElementById('p-'+n).style.display=n===t?'block':'none';
+    document.getElementById('t-'+n).classList.toggle('on',n===t);
+  });
+  document.getElementById('scroller').scrollTop=0;
+  if(t==='add'){
+    // Always reset date to today when opening Add tab
+    const today=new Date().toISOString().split('T')[0];
+    const dateEl=document.getElementById('f-date');
+    if(dateEl&&!dateEl.value)dateEl.value=today;
+  }
+  if(t==='list')renderList();
+  if(t==='mile')renderMileage();
+  if(t==='gst')renderGST();
+}
+
+/* ── SETTINGS ── */
+function openSettings(){
+  document.getElementById('s-apikey').value=getApiKey();
+  document.getElementById('s-bizname').value=settings.bizname;
+  document.getElementById('s-gstn').value=formatGSTNum(settings.gstn||'');
+  document.getElementById('s-gstperiod').value=settings.gstperiod;
+  document.getElementById('s-gstbasis').value=settings.gstbasis;
+  document.getElementById('s-vehicle').value=settings.vehicle;
+  document.getElementById('s-fueltype').value=settings.fueltype||'petrol';
+  document.getElementById('s-milerate').value=settings.milerate;
+  document.getElementById('s-milerate2').value=settings.milerate2;
+  document.getElementById('settings-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-settings').classList.add('open'),10);
+}
+function updateMileRateFromType(){
+  const t=document.getElementById('s-fueltype').value;
+  const rates={petrol:[1.17,0.37],diesel:[1.26,0.35],hybrid:[0.86,0.21],electric:[1.08,0.19]};
+  if(rates[t]){
+    document.getElementById('s-milerate').value=rates[t][0];
+    document.getElementById('s-milerate2').value=rates[t][1];
+  }
+}
+function saveSettings(){
+  settings.bizname=document.getElementById('s-bizname').value.trim();
+  settings.gstn=document.getElementById('s-gstn').value.trim();
+  settings.gstperiod=document.getElementById('s-gstperiod').value;
+  settings.gstbasis=document.getElementById('s-gstbasis').value;
+  settings.vehicle=document.getElementById('s-vehicle').value.trim();
+  settings.fueltype=document.getElementById('s-fueltype').value;
+  settings.milerate=parseFloat(document.getElementById('s-milerate').value)||1.17;
+  settings.milerate2=parseFloat(document.getElementById('s-milerate2').value)||0.37;
+  const apiKey=document.getElementById('s-apikey').value.trim();
+  if(apiKey)localStorage.setItem('nzrt_apikey',apiKey);
+  save();closeModal('settings');showToast('Settings saved');
+  updateStats();
+}
+
+/* ── MODALS ── */
+function closeModal(which){
+  if(which==='edit'){document.getElementById('modal-edit').classList.remove('open');document.getElementById('modal-bg').classList.remove('open');editId=null;}
+  if(which==='settings'){document.getElementById('modal-settings').classList.remove('open');document.getElementById('settings-bg').classList.remove('open');}
+  if(which==='mile'){document.getElementById('modal-mile').classList.remove('open');document.getElementById('mile-bg').classList.remove('open');editMileId=null;}
+}
+
+/* ── CAMERA ── */
+async function openCam(){camTarget='add';await startStream();}
+async function openCamEdit(){camTarget='edit';await startStream();}
+async function startStream(){
+  document.getElementById('cam-wrap').classList.add('open');
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:false});
+    document.getElementById('cam-video').srcObject=stream;
+  }catch(e){closeCam();alert('Camera access denied.\niPhone: Settings → Apps → Safari → Camera → Allow');}
+}
+function flipCam(){facing=facing==='environment'?'user':'environment';startStream();}
+async function snapPhoto(){
+  const v=document.getElementById('cam-video'),c=document.getElementById('snap-canvas');
+  c.width=v.videoWidth||1920;c.height=v.videoHeight||1080;
+  c.getContext('2d').drawImage(v,0,0);
+  let data=c.toDataURL('image/jpeg',.92);
+  // Compress if over 1.5MB
+  const bytes=(data.length-22)*3/4;
+  if(bytes>1.5*1024*1024) data=await compressImage(data,1.5*1024*1024);
+  closeCam();
+  if(camTarget==='edit'){editImgData=data;showPreviewEdit();}
+  else{imgData=data;showPreview();}
+}
+function closeCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}document.getElementById('cam-wrap').classList.remove('open');}
+
+/* ── PHOTOS ── */
+function onFile(e){
+  const f=e.target.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=async ev=>{
+    let data=ev.target.result;
+    // Compress large images to save localStorage space (max 1.5MB stored)
+    const bytes=(data.length-22)*3/4;
+    if(bytes>1.5*1024*1024) data=await compressImage(data,1.5*1024*1024);
+    imgData=data;showPreview();
+  };
+  reader.readAsDataURL(f);
+}
+
+function onPDF(e){
+  const f=e.target.files[0];
+  if(!f||f.type!=='application/pdf')return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    imgData=ev.target.result; // stored as base64 data URL, type=application/pdf
+    // Show PDF preview card, hide image preview
+    document.getElementById('prev-wrap').style.display='none';
+    document.getElementById('pdf-prev-wrap').style.display='flex';
+    document.getElementById('pdf-prev-name').textContent=f.name;
+    document.getElementById('pdf-prev-size').textContent=(f.size/1024).toFixed(0)+' KB · PDF';
+    document.getElementById('retake-row').style.display='block';
+    document.getElementById('ai-btn-wrap').style.display='block';
+    document.getElementById('ai-result').style.display='none';
+    document.getElementById('api-key-setup').style.display=getApiKey()?'none':'block';
+  };
+  r.readAsDataURL(f);
+}
+
+function onPDFEdit(e){
+  const f=e.target.files[0];
+  if(!f||f.type!=='application/pdf')return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    editImgData=ev.target.result;
+    document.getElementById('modal-prev-wrap').style.display='none';
+    document.getElementById('modal-pdf-wrap').style.display='flex';
+    document.getElementById('modal-pdf-name').textContent=f.name;
+    document.getElementById('modal-retake').style.display='block';
+  };
+  r.readAsDataURL(f);
+}
+function showPreview(){
+  const isPDF=imgData&&imgData.startsWith('data:application/pdf');
+  document.getElementById('prev-wrap').style.display=isPDF?'none':'block';
+  document.getElementById('pdf-prev-wrap').style.display=isPDF?'flex':'none';
+  if(!isPDF)document.getElementById('prev-img').src=imgData;
+  document.getElementById('retake-row').style.display='block';
+  document.getElementById('ai-btn-wrap').style.display='block';
+  document.getElementById('ai-result').style.display='none';
+  document.getElementById('api-key-setup').style.display=getApiKey()?'none':'block';
+}
+function clearImg(){
+  imgData=null;
+  document.getElementById('prev-wrap').style.display='none';
+  document.getElementById('pdf-prev-wrap').style.display='none';
+  document.getElementById('retake-row').style.display='none';
+  document.getElementById('file-in').value='';
+  document.getElementById('pdf-in').value='';
+  document.getElementById('ai-btn-wrap').style.display='none';
+  document.getElementById('ai-result').style.display='none';
+}
+function onFileEdit(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{editImgData=ev.target.result;showPreviewEdit();};r.readAsDataURL(f);}
+function showPreviewEdit(){
+  const isPDF=editImgData&&editImgData.startsWith('data:application/pdf');
+  document.getElementById('modal-prev-wrap').style.display=isPDF?'none':'block';
+  document.getElementById('modal-pdf-wrap').style.display=isPDF?'flex':'none';
+  if(!isPDF)document.getElementById('modal-prev').src=editImgData;
+  document.getElementById('modal-retake').style.display='block';
+}
+function clearImgEdit(){
+  editImgData=null;
+  document.getElementById('modal-prev-wrap').style.display='none';
+  document.getElementById('modal-pdf-wrap').style.display='none';
+  document.getElementById('modal-retake').style.display='none';
+  document.getElementById('modal-file-in').value='';
+  const pdfIn=document.getElementById('modal-pdf-in');
+  if(pdfIn)pdfIn.value='';
+}
+
+/* ── FULLSCREEN VIEWER ── */
+function viewImg(source,caption){
+  let src=null;
+  if(source===null){src=imgData;caption=caption||'Receipt preview';}
+  else if(source==='edit'){src=editImgData;const v=document.getElementById('e-vendor').value.trim();caption=v||'Receipt';}
+  else{const r=receipts.find(x=>x.id===source);if(r){src=r.image;caption=r.vendor+' · '+fmtDate(r.date);}}
+  if(!src){showToast('No file to view');return;}
+  // PDFs can't display in an img tag — open in a new browser tab
+  if(src.startsWith('data:application/pdf')){
+    const a=document.createElement('a');
+    a.href=src;a.target='_blank';a.click();
+    return;
+  }
+  document.getElementById('img-viewer-img').src=src;
+  document.getElementById('img-viewer-caption').textContent=caption;
+  document.getElementById('img-viewer').classList.add('open');
+}
+function closeViewer(){document.getElementById('img-viewer').classList.remove('open');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeViewer();});
+
+/* ── AI ANALYSER ── */
+function getApiKey(){return localStorage.getItem('nzrt_apikey')||'';}
+
+function saveApiKey(){
+  const k=document.getElementById('api-key-input').value.trim();
+  if(!k){showToast('Please paste your API key');return;}
+  localStorage.setItem('nzrt_apikey',k);
+  document.getElementById('api-key-setup').style.display='none';
+  showToast('API key saved ✓');
+}
+
+// Compress an image data URL to under maxBytes using canvas
+// Tries reducing quality first, then also scales down if needed
+async function compressImage(dataUrl, maxBytes=4.5*1024*1024){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      let w=img.naturalWidth, h=img.naturalHeight;
+      // Scale down if very large (max 2400px on longest side)
+      const maxDim=2400;
+      if(w>maxDim||h>maxDim){
+        if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}
+        else{w=Math.round(w*maxDim/h);h=maxDim;}
+      }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      // Try reducing JPEG quality until under limit
+      let quality=0.85;
+      const attempt=()=>{
+        const result=canvas.toDataURL('image/jpeg',quality);
+        const bytes=(result.length-22)*3/4; // approximate base64 size
+        if(bytes<=maxBytes||quality<=0.3){resolve(result);}
+        else{quality-=0.1;attempt();}
+      };
+      attempt();
+    };
+    img.src=dataUrl;
+  });
+}
+
+async function analyseReceipt(){
+  if(!imgData){showToast('No image to analyse');return;}
+  const key=getApiKey();
+  if(!key){
+    document.getElementById('api-key-setup').style.display='block';
+    document.getElementById('api-key-input').focus();
+    return;
+  }
+  const btn=document.getElementById('ai-btn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span> Reading receipt...';
+  document.getElementById('ai-result').style.display='none';
+  try{
+    const mt=imgData.split(';')[0].split(':')[1];
+    const isPDF=mt==='application/pdf';
+
+    // Compress images that exceed Anthropic's 5MB limit
+    let processedData=imgData;
+    if(!isPDF){
+      const rawBytes=(imgData.length-22)*3/4;
+      if(rawBytes>4.5*1024*1024){
+        btn.innerHTML='<span class="spinner"></span> Compressing image...';
+        processedData=await compressImage(imgData);
+        showToast('Image compressed for AI ✓');
+      }
+    }
+
+    const b64=processedData.split(',')[1];
+    const finalMt=isPDF?'application/pdf':'image/jpeg';
+
+    // Build the content block — PDFs use 'document' type, images use 'image' type
+    const fileBlock=isPDF
+      ? {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
+      : {type:'image',source:{type:'base64',media_type:finalMt,data:b64}};
+
+    const ANTHROPIC_URL='https://api.anthropic.com/v1/messages';
+    const reqBody=JSON.stringify({
+      model:'claude-opus-4-5-20251101',max_tokens:1000,
+      messages:[{role:'user',content:[
+        fileBlock,
+        {type:'text',text:`Analyse this New Zealand receipt image carefully. Look for the merchant name, total amount, date, invoice/receipt number, and the supplier's GST number (usually printed as "GST No." or "IRD No." or "NZBN").
+
+Reply ONLY with a single valid JSON object. No markdown, no explanation, no extra text:
+{"vendor":"merchant name","amount":123.45,"date":"YYYY-MM-DD","invoice_number":"","supplier_gst":"","has_gst":true,"category":"meals|transport|office|software|marketing|professional|accommodation|utilities|other","notes":"brief description of what was purchased"}
+
+Rules:
+- amount must be a number (the GST-inclusive total), not a string
+- date must be YYYY-MM-DD format, today is ${new Date().toISOString().split('T')[0]}
+- has_gst should be true if you see a GST number or GST amount on the receipt
+- If you cannot read a field clearly, use null or empty string`}
+      ]}]
+    });
+    const reqHeaders={
+      'Content-Type':'application/json',
+      'x-api-key':key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    };
+
+    // Try direct first, fall back to CORS proxy if blocked (iOS Safari)
+    let res;
+    try{
+      res=await fetch(ANTHROPIC_URL,{method:'POST',headers:reqHeaders,body:reqBody});
+    }catch(directErr){
+      // Direct fetch blocked (iOS Safari CORS) — try via proxy
+      btn.innerHTML='<span class="spinner"></span> Retrying...';
+      const proxyURL='https://corsproxy.io/?'+encodeURIComponent(ANTHROPIC_URL);
+      res=await fetch(proxyURL,{method:'POST',headers:reqHeaders,body:reqBody});
+    }
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message||JSON.stringify(data.error));
+    const text=data.content.map(b=>b.text||'').join('').trim();
+    // Extract JSON from response robustly
+    const jsonMatch=text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch)throw new Error('No JSON in response: '+text.substring(0,100));
+    const p=JSON.parse(jsonMatch[0]);
+    if(p.vendor)document.getElementById('f-vendor').value=p.vendor;
+    if(p.amount!=null)document.getElementById('f-amount').value=Number(p.amount).toFixed(2);
+    if(p.date)document.getElementById('f-date').value=p.date;
+    if(p.invoice_number)document.getElementById('f-invoice').value=p.invoice_number;
+    if(p.supplier_gst)document.getElementById('f-suppgst').value=formatGSTNum(p.supplier_gst);
+    if(p.category){selCat=p.category;buildCats('cat-scroll',selCat,'pickCat',true);}
+    if(p.notes)document.getElementById('f-notes').value=p.notes;
+    document.getElementById('f-gst').value=p.has_gst?'yes':'no';
+    const box=document.getElementById('ai-result');
+    box.className='ai-result-ok';box.style.display='block';
+    box.innerHTML=`✓ Found: <strong>${p.vendor||'receipt'}</strong>${p.amount!=null?' · $'+Number(p.amount).toFixed(2):''}${p.invoice_number?' · Inv# '+p.invoice_number:''}${p.supplier_gst?' · Supplier GST# '+p.supplier_gst:''}`;
+    document.getElementById('api-key-setup').style.display='none';
+    updateEntWarn('ent-warn',selCat);
+    calcLiveGST();
+  }catch(e){
+    const box=document.getElementById('ai-result');
+    box.className='ai-result-err';box.style.display='block';
+    const msg=e.message||'Unknown error';
+    const isNetwork=msg.includes('Load failed')||msg.includes('Failed to fetch')||msg.includes('NetworkError');
+    box.innerHTML=isNetwork
+      ? '⚠️ <strong>Network blocked by iOS Safari.</strong> To fix: open the app in <strong>Chrome for iPhone</strong> instead of Safari, or go to iPhone Settings → Safari → Advanced → turn off "Prevent Cross-Site Tracking".'
+      : 'Could not read receipt — fill in details manually. ('+msg+')';
+  }
+  btn.disabled=false;btn.innerHTML='<span>✦</span> Analyse with AI';
+}
+
+/* ── SAVE RECEIPT ── */
+function saveReceipt(){
+  const vendor=document.getElementById('f-vendor').value.trim();
+  const amount=parseFloat(document.getElementById('f-amount').value);
+  const date=document.getElementById('f-date').value;
+  if(!vendor||isNaN(amount)||amount<=0||!date){alert('Please enter vendor, amount, and date.');return;}
+  const id=Date.now();
+  receipts.unshift({
+    id,vendor,amount,date,
+    gst:document.getElementById('f-gst').value,
+    invoice:document.getElementById('f-invoice').value.trim(),
+    suppgst:document.getElementById('f-suppgst').value.trim(),
+    notes:document.getElementById('f-notes').value.trim(),
+    reconciled:document.getElementById('f-recon').checked,
+    category:selCat,image:imgData
+  });
+  save();updateStats();
+  ['f-vendor','f-amount','f-notes','f-invoice','f-suppgst'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  document.getElementById('f-recon').checked=false;
+  document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('f-gst').value='yes';
+  selCat='other';buildCats('cat-scroll',selCat,'pickCat',true);
+  document.getElementById('ent-warn').style.display='none';
+  document.getElementById('ai-result').style.display='none';
+  document.getElementById('ai-btn-wrap').style.display='none';
+  document.getElementById('f-gst-calc-row').style.display='none';
+  clearImg();goTab('list');
+}
+
+/* ── EDIT RECEIPT ── */
+function openEdit(id){
+  const r=receipts.find(x=>x.id===id);if(!r)return;
+  editId=id;editImgData=r.image||null;editCat=r.category||'other';
+  document.getElementById('e-vendor').value=r.vendor;
+  document.getElementById('e-amount').value=r.amount.toFixed(2);
+  document.getElementById('e-date').value=r.date;
+  document.getElementById('e-gst').value=r.gst;
+  document.getElementById('e-invoice').value=r.invoice||'';
+  document.getElementById('e-suppgst').value=formatGSTNum(r.suppgst||'');
+  document.getElementById('e-recon').checked=r.reconciled||false;
+  document.getElementById('e-notes').value=r.notes||'';
+  buildCats('modal-cat-scroll',editCat,'pickCatEdit',false);
+  updateEntWarn('e-ent-warn',editCat);
+  if(editImgData)showPreviewEdit();
+  else{document.getElementById('modal-prev-wrap').style.display='none';document.getElementById('modal-retake').style.display='none';}
+  document.getElementById('modal-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-edit').classList.add('open'),10);
+}
+function saveEdit(){
+  const vendor=document.getElementById('e-vendor').value.trim();
+  const amount=parseFloat(document.getElementById('e-amount').value);
+  const date=document.getElementById('e-date').value;
+  if(!vendor||isNaN(amount)||amount<=0||!date){alert('Please enter vendor, amount, and date.');return;}
+  const idx=receipts.findIndex(r=>r.id===editId);if(idx===-1)return;
+  receipts[idx]={...receipts[idx],vendor,amount,date,
+    gst:document.getElementById('e-gst').value,
+    invoice:document.getElementById('e-invoice').value.trim(),
+    suppgst:document.getElementById('e-suppgst').value.trim(),
+    reconciled:document.getElementById('e-recon').checked,
+    notes:document.getElementById('e-notes').value.trim(),
+    category:editCat,image:editImgData};
+  save();updateStats();closeModal('edit');renderList();
+}
+function confirmDelete(){
+  if(!confirm('Delete this receipt?'))return;
+  receipts=receipts.filter(r=>r.id!==editId);
+  save();updateStats();closeModal('edit');renderList();
+}
+
+/* ── RENDER LIST ── */
+function renderList(){
+  const cats=[...new Set(receipts.map(r=>r.category))];
+  document.getElementById('filt-row').innerHTML=['all',...cats].map(id=>{
+    const c=id==='all'?{icon:'◉',label:'All'}:catBy(id);
+    return `<button class="f-pill${curFilter===id?' on':''}" onclick="setFilter('${id}')">${c.icon} ${id==='all'?'All':c.label}</button>`;
+  }).join('');
+  const filtered=curFilter==='all'?receipts:receipts.filter(r=>r.category===curFilter);
+  const list=document.getElementById('r-list'),empty=document.getElementById('r-empty');
+  if(!filtered.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=filtered.map(r=>{
+    const c=catBy(r.category);
+    const gst=gstForReceipt(r);
+    const isEnt=c.entertainment;
+    const claimable=claimableForReceipt(r);
+    return `<div class="r-card">
+      ${r.image
+        ?r.image.startsWith('data:application/pdf')
+          ?`<div class="r-thumb" style="cursor:pointer;background:rgba(255,59,48,.08);display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();viewImg(${r.id},'')">
+              <span style="font-size:22px;">📄</span>
+            </div>`
+          :`<div class="r-thumb" style="cursor:pointer" onclick="event.stopPropagation();viewImg(${r.id},'')">
+              <img src="${r.image}" alt="" style="width:56px;height:100%;object-fit:cover;display:block;">
+              <div style="position:absolute;bottom:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:9px;color:white;">⛶</div>
+            </div>`
+        :`<div class="r-thumb-ph">${c.icon}</div>`}
+      <div class="r-body" onclick="openEdit(${r.id})">
+        <div class="r-top">
+          <div class="r-name">${r.vendor}</div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div class="r-amt">$${r.amount.toFixed(2)}</div>
+            ${isEnt?`<div style="font-size:11px;color:var(--text3)">Claimable $${claimable.toFixed(2)}</div>`:''}
+          </div>
+        </div>
+        <div class="r-tags">
+          <span class="r-date">${fmtDate(r.date)}</span>
+          <span class="r-badge" style="background:${c.color}22;color:${c.color}">${c.icon} ${c.label}</span>
+          ${gst>0?`<span class="r-badge" style="background:rgba(255,149,0,.12);color:var(--orange)">GST $${gst.toFixed(2)}</span>`:''}
+          ${isEnt?`<span class="r-badge" style="background:rgba(255,59,48,.1);color:var(--red)">50% rule</span>`:''}
+          ${r.invoice?`<span class="r-badge" style="background:var(--fill2);color:var(--text3)">#${r.invoice}</span>`:''}
+          ${r.reconciled?`<span class="r-badge" style="background:rgba(52,199,89,.12);color:var(--accent-dark)">✓ Reconciled</span>`:''}
+        </div>
+        ${r.notes?`<div class="r-notes">${r.notes}</div>`:''}
+      </div>
+      <div class="r-chevron" onclick="openEdit(${r.id})">›</div>
+    </div>`;
+  }).join('');
+}
+function setFilter(id){curFilter=id;renderList();}
+
+/* ── MILEAGE ── */
+function calcMileValue(km, cumulativeKmBefore){
+  // Tier 1 applies to first 14000km total, Tier 2 beyond
+  const TIER_THRESHOLD=14000;
+  const t1=settings.milerate||1.17;
+  const t2=settings.milerate2||0.37;
+  const t1start=cumulativeKmBefore;
+  const t1end=Math.min(cumulativeKmBefore+km, TIER_THRESHOLD);
+  const t1km=Math.max(0, t1end-t1start);
+  const t2km=km-t1km;
+  return (t1km*t1)+(t2km*t2);
+}
+
+function renderMileage(){
+  const rateLabel=`$${(settings.milerate||1.17).toFixed(2)}/km T1 · $${(settings.milerate2||0.37).toFixed(2)}/km T2`;
+  const el=document.getElementById('mile-rate-display');
+  if(el)el.textContent=rateLabel;
+
+  // Sort ascending by date to calculate cumulative km correctly
+  const sorted=mileage.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  let cumKm=0, totalVal=0;
+  const valMap={};
+  sorted.forEach(m=>{
+    const v=calcMileValue(m.km, cumKm);
+    valMap[m.id]=v;
+    totalVal+=v;
+    cumKm+=m.km;
+  });
+  const totalKm=mileage.reduce((s,m)=>s+m.km,0);
+  document.getElementById('mile-total-km').textContent=totalKm.toFixed(1)+' km';
+  document.getElementById('mile-total-val').textContent='$'+totalVal.toFixed(2);
+
+  const list=document.getElementById('mile-list'),empty=document.getElementById('mile-empty');
+  if(!mileage.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=mileage.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(m=>{
+    const val=m.inProgress?'—':(valMap[m.id]||0).toFixed(2);
+    const odoStr=(m.odoStart!=null)?` · Odo: ${m.odoStart.toLocaleString()}${m.odoEnd!=null?'→'+m.odoEnd.toLocaleString():' (started)'}`:''
+    const badge=m.inProgress?`<span class="r-badge" style="background:rgba(255,149,0,.12);color:var(--orange)">In progress</span>`:'';
+    return `<div class="mile-card" onclick="openMileModal(${m.id})">
+      <div class="mile-icon">${m.inProgress?'🚦':'🚗'}</div>
+      <div class="mile-body">
+        <div class="mile-route">${m.from} → ${m.inProgress&&m.to==='(in progress)'?'…':m.to}</div>
+        <div class="mile-meta">${fmtDate(m.date)}${odoStr}${m.purpose?' · '+m.purpose:''}</div>
+        ${badge?`<div style="margin-top:4px">${badge}</div>`:''}
+      </div>
+      <div class="mile-km">${m.inProgress?'—':m.km+' km'}<br><span style="font-size:12px;color:var(--text3);font-weight:400">${m.inProgress?'tap to finish':'$'+val}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function openMileModal(id){
+  editMileId=id;
+  if(id){
+    const m=mileage.find(x=>x.id===id);if(!m)return;
+    document.getElementById('mile-modal-title').textContent='Edit Trip';
+    document.getElementById('m-date').value=m.date;
+    document.getElementById('m-from').value=m.from;
+    document.getElementById('m-to').value=m.to;
+    document.getElementById('m-km').value=m.km;
+    document.getElementById('m-odo-start').value=m.odoStart||'';
+    document.getElementById('m-odo-end').value=m.odoEnd||'';
+    document.getElementById('m-purpose').value=m.purpose||'';
+    document.getElementById('mile-del-btn').style.display='block';
+  } else {
+    document.getElementById('mile-modal-title').textContent='Add Trip';
+    document.getElementById('m-date').value=new Date().toISOString().split('T')[0];
+    document.getElementById('m-from').value='';document.getElementById('m-to').value='';
+    document.getElementById('m-km').value='';document.getElementById('m-purpose').value='';
+    document.getElementById('m-odo-start').value='';document.getElementById('m-odo-end').value='';
+    document.getElementById('mile-del-btn').style.display='none';
+  }
+  document.getElementById('mile-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-mile').classList.add('open'),10);
+}
+function calcOdoKm(){
+  const s=parseFloat(document.getElementById('m-odo-start').value);
+  const e=parseFloat(document.getElementById('m-odo-end').value);
+  if(!isNaN(s)&&!isNaN(e)&&e>s){document.getElementById('m-km').value=(e-s).toFixed(1);}
+}
+function saveMileage(){
+  const from=document.getElementById('m-from').value.trim();
+  const to=document.getElementById('m-to').value.trim();
+  const date=document.getElementById('m-date').value;
+  const odoStart=document.getElementById('m-odo-start').value.trim();
+  const odoEnd=document.getElementById('m-odo-end').value.trim();
+  const kmRaw=document.getElementById('m-km').value;
+  const km=parseFloat(kmRaw);
+
+  // Require date and from at minimum
+  if(!from||!date){alert('Please enter at least a date and starting point.');return;}
+
+  // If only odo start is set, save as an in-progress trip (no km yet)
+  const hasOdoStart=odoStart!=='';
+  const hasOdoEnd=odoEnd!=='';
+  const hasKm=!isNaN(km)&&km>0;
+  const inProgress=hasOdoStart&&!hasOdoEnd&&!hasKm;
+
+  // Need km unless it's an in-progress trip
+  if(!inProgress&&!hasKm){
+    alert('Please enter the distance, or enter an odometer finish reading to calculate it.');return;
+  }
+
+  const finalKm=inProgress?0:km;
+  const entry={
+    id:editMileId||Date.now(),from,
+    to:to||'(in progress)',
+    km:finalKm,date,
+    purpose:document.getElementById('m-purpose').value.trim(),
+    odoStart:hasOdoStart?parseFloat(odoStart):null,
+    odoEnd:hasOdoEnd?parseFloat(odoEnd):null,
+    inProgress
+  };
+  if(editMileId){const idx=mileage.findIndex(m=>m.id===editMileId);if(idx>-1)mileage[idx]=entry;}
+  else{mileage.unshift(entry);}
+  save();closeModal('mile');renderMileage();
+}
+function deleteMileage(){
+  if(!confirm('Delete this trip?'))return;
+  mileage=mileage.filter(m=>m.id!==editMileId);
+  save();closeModal('mile');renderMileage();
+}
+
+/* ── GST PANEL ── */
+function renderGST(){
+  // Guard: only run if GST panel elements are accessible
+  const incomeModeEl=document.getElementById('income-mode');
+  const periodScrollEl=document.getElementById('period-scroll');
+  const gstWrapEl=document.getElementById('gst-return-wrap');
+  if(!incomeModeEl||!periodScrollEl||!gstWrapEl) return;
+
+  try{
+  const periods=buildGSTPeriods();
+  if(selPeriodIdx>=periods.length)selPeriodIdx=periods.length-1;
+  if(selPeriodIdx<0)selPeriodIdx=0;
+
+  document.getElementById('period-scroll').innerHTML=periods.map((p,i)=>
+    `<button class="period-chip${i===selPeriodIdx?' on':''}" onclick="selPeriod(${i})">${fmtPeriod(p)}</button>`
+  ).join('');
+
+  document.getElementById('period-exp-row').style.display=periods.length?'flex':'none';
+
+  const period=periods[selPeriodIdx];
+  if(!period){document.getElementById('gst-return-wrap').innerHTML='';return;}
+
+  const pR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=period.start&&d<=period.end;});
+
+  // Correct GST101A box mapping:
+  // Box 5 = total sales & income (inc GST) — user fills from own invoices
+  // Box 6 = zero-rated supplies
+  // Box 7 = GST on sales (output tax) — user fills from own invoices
+  // Box 11 = total purchases & expenses (inc GST) — sum of all receipts
+  // Box 12 = credit adjustments
+  // Box 13 = total GST on purchases (input tax) — what we calculate
+  // Box 14 = total GST on purchases (Box 12 + Box 13)
+  // Box 10 = total GST on sales (Box 7 + Box 8 + Box 9)
+  // If Box 14 > Box 10 → refund. If Box 10 > Box 14 → GST to pay.
+  const inputGST=pR.reduce((s,r)=>s+gstForReceipt(r),0);
+  const totalSpend=pR.reduce((s,r)=>s+claimableForReceipt(r),0);
+  const entReceipts=pR.filter(r=>CATS.find(c=>c.id===r.category&&c.entertainment));
+
+  // Mileage in this period — use Tier 1/2 with cumulative km tracking
+  const pM=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=period.start&&d<=period.end;});
+  const totalKm=pM.reduce((s,m)=>s+m.km,0);
+  // Calculate cumulative km up to start of this period to correctly apply Tier 1/2
+  const allSorted=mileage.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  let cumKmBefore=0;
+  allSorted.forEach(m=>{const d=new Date(m.date+'T12:00:00');if(d<period.start)cumKmBefore+=m.km;});
+  let cumKm4=cumKmBefore;
+  const mileVal=pM.slice().sort((a,b)=>a.date.localeCompare(b.date)).reduce((s,m)=>{
+    const v=calcMileValue(m.km,cumKm4);
+    cumKm4+=m.km;
+    return s+v;
+  },0);
+
+  // GST CALCULATIONS (all NZ 15% = amount × 3/23 = amount × 15/115)
+  // inputGST = GST content of expense receipts = claimable as input tax on GST return
+  // outputGST = GST content of sales = what you owe IRD
+  // netGST = outputGST - inputGST
+  //   positive → you owe IRD
+  //   negative → IRD owes you a refund
+  // NOTE: Mileage (km rate) is an INCOME TAX deduction only — it does NOT appear on your GST return
+  // because you're not paying GST to a supplier when using your own vehicle.
+
+  // Read income fields
+  const incomeMode=document.getElementById('income-mode').value; // 'exclusive' or 'inclusive'
+  const incomeRaw=parseFloat(document.getElementById('income-total').value)||0;
+  const incomeZero=parseFloat(document.getElementById('income-zero').value)||0;
+
+  // Update label and hint based on mode
+  const lbl=document.getElementById('income-total-lbl');
+  const hint=document.getElementById('income-hint');
+  if(incomeMode==='exclusive'){
+    if(lbl)lbl.textContent='Your fees (ex. GST)';
+    if(hint)hint.textContent='Enter the fee you charged before GST — e.g. if you invoiced "$100 + GST = $115", enter $100. GST collected = fees × 15%.';
+  } else {
+    if(lbl)lbl.textContent='Total received (inc. GST)';
+    if(hint)hint.textContent='Enter the full amount your client paid including GST — e.g. enter $115 if the invoice total was $115. GST = total × 3/23.';
+  }
+
+  // Calculate output GST based on mode
+  // GST-exclusive: client pays fee + 15%, so GST = fee × 15%
+  // GST-inclusive: total already includes GST, so GST = total × 3/23
+  let taxableFees, outputGST, incomeTotalIncGST;
+  if(incomeMode==='exclusive'){
+    taxableFees=Math.max(0, incomeRaw-incomeZero);
+    outputGST=taxableFees*0.15;           // $100 ex-GST → $15 GST ✅
+    incomeTotalIncGST=incomeRaw+outputGST; // total inc-GST for myIR Box 5
+  } else {
+    // inclusive: GST is already inside the total
+    taxableFees=Math.max(0, incomeRaw-incomeZero);
+    outputGST=taxableFees*(3/23);          // $115 inc-GST → $15 GST ✅
+    incomeTotalIncGST=incomeRaw;
+  }
+
+  const netGST=outputGST-inputGST; // positive = pay IRD, negative = IRD refund
+
+  // Populate read-only GST collected field
+  if(incomeRaw>0){
+    document.getElementById('income-gst').value=outputGST.toFixed(2);
+    document.getElementById('income-gst').style.color='';
+  } else {
+    document.getElementById('income-gst').value='';
+    document.getElementById('income-gst').style.color='var(--text3)';
+  }
+
+  const notRecon=pR.filter(r=>!r.reconciled).length;
+  const missingGST=pR.filter(r=>r.amount>50&&!r.suppgst);
+  const incomplete=pR.filter(r=>!r.notes||!r.notes.trim());
+
+  // Income tax deductions — full FY scope (not per GST period)
+  const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+  const fyClaimable=fyR.reduce((s,r)=>s+claimableForReceipt(r),0);
+  const fyEntCount=fyR.filter(r=>CATS.find(c=>c.id===r.category&&c.entertainment)).length;
+  const fyMileAll=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=FY.start&&d<=FY.end;}).sort((a,b)=>a.date.localeCompare(b.date));
+  const fyKm=fyMileAll.reduce((s,m)=>s+m.km,0);
+  let cumKmFY=0;
+  const fyMileVal=fyMileAll.reduce((s,m)=>{const v=calcMileValue(m.km,cumKmFY);cumKmFY+=m.km;return s+v;},0);
+
+  const w=document.getElementById('gst-return-wrap');
+  w.innerHTML=`
+    ${settings.gstn?`<div style="margin:0 16px 10px;padding:11px 14px;background:var(--fill3);border-radius:12px;font-size:13px;color:var(--text3);">
+      <strong style="color:var(--text2)">${settings.bizname||'Your business'}</strong>&nbsp;&nbsp;GST# ${settings.gstn}&nbsp;&nbsp;·&nbsp;&nbsp;${settings.gstbasis==='invoice'?'Invoice basis':'Payments basis'}
+    </div>`:'<div class="gst-note-box" style="margin:0 16px 10px;">⚙️ Add your GST number in Settings to appear on exports.</div>'}
+
+    <div class="gst-return-card">
+      <div class="gst-section-hdr">GST return — ${fmtPeriod(period)}</div>
+      <div class="gst-line">
+        <span class="lbl">GST collected on your sales (output)</span>
+        <span class="val">${incomeRaw>0?'$'+outputGST.toFixed(2):'<span style="color:var(--text3);font-weight:400;font-size:13px">Enter sales above ↑</span>'}</span>
+      </div>
+      <div class="gst-line">
+        <span class="lbl">GST claimable on expenses (input)</span>
+        <span class="val" style="color:var(--accent-dark)">−$${inputGST.toFixed(2)}</span>
+      </div>
+      ${incomeRaw>0
+        ? netGST>0
+          ? `<div class="gst-line payable"><span class="lbl">⚠️ Net GST to pay IRD</span><span class="val">$${netGST.toFixed(2)}</span></div>`
+          : `<div class="gst-line total"><span class="lbl">✓ Net GST refund from IRD</span><span class="val">$${Math.abs(netGST).toFixed(2)}</span></div>`
+        : `<div class="gst-line total"><span class="lbl">GST claimable this period</span><span class="val">$${inputGST.toFixed(2)}</span></div>`
+      }
+    </div>
+
+    <div class="gst-return-card">
+      <div class="gst-section-hdr">Income tax deductions — ${FY.label} (full year)</div>
+      <div class="gst-line">
+        <span class="lbl">Business expenses (claimable portion)</span>
+        <span class="val">$${fyClaimable.toFixed(2)}</span>
+      </div>
+      <div class="gst-line">
+        <span class="lbl">Mileage (${fyKm.toFixed(0)} km @ IRD rate) ⓘ</span>
+        <span class="val">$${fyMileVal.toFixed(2)}</span>
+      </div>
+      ${fyEntCount?`<div class="gst-line"><span class="lbl">Entertainment (50% deductible only)</span><span class="val">${fyEntCount} receipts</span></div>`:''}
+      <div class="gst-line total">
+        <span class="lbl">Total income tax deductions (FY)</span>
+        <span class="val">$${(fyClaimable+fyMileVal).toFixed(2)}</span>
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 8px;">ⓘ Mileage uses the IRD km rate and is an <strong>income tax deduction only</strong> — it does not appear on your GST return. Income tax deductions are shown for the full financial year (${FY.range}), not just this GST period.</div>
+
+    ${notRecon>0?`<div class="warn-banner" style="margin:0 16px 10px;">
+      <span class="warn-icon">⚠️</span>
+      <span class="warn-text"><strong>${notRecon} receipt${notRecon>1?'s':''} not yet reconciled</strong> against your bank statement. Mark them reconciled in the Receipts tab before filing.</span>
+    </div>`:''}
+
+    ${missingGST.length?`<div class="warn-banner" style="margin:0 16px 10px;">
+      <span class="warn-icon">⚠️</span>
+      <span class="warn-text"><strong>${missingGST.length} receipt${missingGST.length>1?'s':''} over $50</strong> are missing a supplier GST number — IRD requires this on tax invoices over $50. Tap each receipt and add it.</span>
+    </div>`:''}
+
+    ${incomplete.length?`<div class="warn-banner" style="margin:0 16px 10px;">
+      <span class="warn-icon">⚠️</span>
+      <span class="warn-text"><strong>${incomplete.length} receipt${incomplete.length>1?'s':''}</strong> have no business purpose recorded. IRD may ask you to justify any expense.</span>
+    </div>`:''}
+
+    <div class="gst-note-box">
+      <strong>Filing checklist:</strong><br>
+      ${pR.length===0?'<span style="color:var(--red)">✗ No receipts for this period</span>':'✓ '+pR.length+' receipt'+(pR.length>1?'s':'')+' recorded'}<br>
+      ${notRecon===0?'✓ All receipts reconciled':'<span style="color:var(--orange)">○ '+notRecon+' not yet reconciled</span>'}<br>
+      ${missingGST.length===0?'✓ All invoices over $50 have supplier GST#':'<span style="color:var(--orange)">○ '+missingGST.length+' missing supplier GST#</span>'}<br>
+      ${settings.gstn?'✓ Your GST# saved':'<span style="color:var(--orange)">○ Add your GST# in Settings</span>'}<br>
+      ${incomeRaw>0?'✓ Sales income entered':'<span style="color:var(--orange)">○ Enter your total sales above to see net GST</span>'}
+    </div>
+
+    <div class="gst-note-box">
+      📋 <strong>To file in myIR:</strong> ird.govt.nz → myIR → open your GST return → enter total sales (inc. GST) <strong>$${incomeRaw>0?incomeTotalIncGST.toFixed(2):'?'}</strong> and zero-rated $${incomeZero>0?incomeZero.toFixed(2):'0.00'} → enter purchases $${totalSpend.toFixed(2)} and input tax $${inputGST.toFixed(2)}.
+    </div>
+  `;
+
+  // Charts
+  const chartFyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+  const months=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  const now=new Date();
+  const mT=months.map((m,i)=>{
+    const mi=(i+3)%12,my=mi<3?FY.start.getFullYear()+1:FY.start.getFullYear();
+    const sum=chartFyR.filter(r=>{const d=new Date(r.date+'T12:00:00');return d.getMonth()===mi&&d.getFullYear()===my;}).reduce((s,r)=>s+r.amount,0);
+    return{m,sum,cur:mi===now.getMonth()&&my===now.getFullYear()};
+  });
+  const maxM=Math.max(...mT.map(t=>t.sum),1);
+  document.getElementById('bar-row').innerHTML=mT.map(({m,sum,cur})=>
+    `<div class="b-col"><div class="b-bar${cur?' cur':''}" style="height:${Math.max(sum/maxM*64,sum>0?4:2)}px"></div><div class="b-lbl">${m}</div></div>`
+  ).join('');
+  const grand=chartFyR.reduce((s,r)=>s+r.amount,0)||1;
+  const cT=CATS.map(c=>({...c,sum:chartFyR.filter(r=>r.category===c.id).reduce((s,r)=>s+r.amount,0)})).filter(c=>c.sum>0).sort((a,b)=>b.sum-a.sum);
+  document.getElementById('cat-chart').innerHTML=cT.length?cT.map(c=>
+    `<div class="cb-row"><div class="cb-hdr"><span class="cb-name">${c.icon} ${c.label}</span><span class="cb-val">$${c.sum.toFixed(2)}</span></div><div class="cb-bg"><div class="cb-fill" style="width:${(c.sum/grand*100).toFixed(1)}%;background:${c.color}55"></div></div></div>`
+  ).join(''):'<p style="font-size:14px;color:var(--text3)">No data yet.</p>';
+  }catch(e){console.error('renderGST error:',e);}
+}
+
+function selPeriod(i){
+  selPeriodIdx=i;
+  renderGST();
+  document.getElementById('period-exp-row').style.display='flex';
+}
+
+/* ── PERIOD CSV ── */
+function buildCSVForPeriod(period){
+  const pR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=period.start&&d<=period.end;});
+  const rows=[['Receipt ID','Receipt File','Date','Vendor','Amount (NZD)','Claimable Amount','GST Amount','GST Included','Entertainment 50% Rule','Invoice #','Supplier GST #','Your GST #','Category','Reconciled','Business Purpose']];
+  pR.forEach(r=>{
+    const gst=gstForReceipt(r);
+    const claimable=claimableForReceipt(r);
+    const cat=catBy(r.category);
+    const isEnt=CATS.find(c=>c.id===r.category)?.entertainment||false;
+    rows.push([r.id,r.image?(r.image.startsWith('data:application/pdf')?`receipt_${r.id}.pdf`:`receipt_${r.id}.jpg`):'no_image',r.date,r.vendor,'$'+r.amount.toFixed(2),'$'+claimable.toFixed(2),'$'+gst.toFixed(2),r.gst==='yes'?'Yes':r.gst==='partial'?'Partial':'No',isEnt?'Yes':'No',r.invoice||'',r.suppgst||'',settings.gstn||'',cat.label,r.reconciled?'Yes':'No',r.notes||'']);
+  });
+  return {csv:rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'), receipts:pR};
+}
+
+function getPeriodLabel(){
+  const periods=buildGSTPeriods();
+  const p=periods[selPeriodIdx];
+  if(!p)return'period';
+  const s=p.start,e=p.end;
+  return `${s.toLocaleDateString('en-NZ',{month:'short',year:'numeric'}).replace(' ','_')}_to_${e.toLocaleDateString('en-NZ',{month:'short',year:'numeric'}).replace(' ','_')}`;
+}
+
+function exportPeriodCSV(){
+  const periods=buildGSTPeriods();
+  const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
+  const {csv,receipts:pR}=buildCSVForPeriod(period);
+  if(!pR.length){showToast('No receipts in this period');return;}
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`GST_receipts_${getPeriodLabel()}.csv`;a.click();
+  showToast(`CSV — ${pR.length} receipts`);
+}
+
+async function exportPeriodZip(){
+  const periods=buildGSTPeriods();
+  const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
+  const {csv,receipts:pR}=buildCSVForPeriod(period);
+  if(!pR.length){showToast('No receipts in this period');return;}
+  showToast('Building ZIP…');
+  try{
+    const zip=new JSZip();
+    zip.file(`GST_receipts_${getPeriodLabel()}.csv`,csv);
+    const folder=zip.folder('receipt_images');
+    let n=0;
+    pR.forEach(r=>{if(r.image){const ext=r.image.startsWith('data:application/pdf')?'pdf':'jpg';folder.file(`receipt_${r.id}.${ext}`,r.image.split(',')[1],{base64:true});n++;}});
+    // Mileage for this period
+    const pM=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=period.start&&d<=period.end;});
+    if(pM.length){
+      const t1=settings.milerate||1.17,t2=settings.milerate2||0.37;
+      const allSorted=mileage.slice().sort((a,b)=>a.date.localeCompare(b.date));
+      let cumKmB=0;allSorted.forEach(m=>{const d=new Date(m.date+'T12:00:00');if(d<period.start)cumKmB+=m.km;});
+      let cumKmZ=cumKmB;
+      const mRows=[['Date','From','To','Odo Start','Odo End','Distance (km)','Tier','Claimable ($)','Purpose']];
+      pM.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>{
+        const v=calcMileValue(m.km,cumKmZ);
+        const tier=cumKmZ+m.km<=14000?'T1':(cumKmZ>=14000?'T2':'T1+T2');
+        cumKmZ+=m.km;
+        mRows.push([m.date,m.from,m.to,m.odoStart??'',m.odoEnd??'',m.km,tier,'$'+v.toFixed(2),m.purpose||'']);
+      });
+      zip.file('mileage_log.csv',mRows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'));
+    }
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`GST_${getPeriodLabel()}.zip`;a.click();
+    URL.revokeObjectURL(url);showToast(`ZIP — ${n} photos + CSV`);
+  }catch(e){showToast('ZIP failed: '+e.message);}
+}
+
+async function exportPeriodPDF(){
+  const periods=buildGSTPeriods();
+  const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
+  const {receipts:pR}=buildCSVForPeriod(period);
+  if(!pR.length){showToast('No receipts in this period');return;}
+  showToast('Building PDF…');
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const pw=210,ph=297,mg=14,cw=182;
+    const GREEN=[36,138,61],DARK=[20,20,20],MID=[110,110,110],LIGHT=[210,210,210],BG=[245,245,242];
+    const sf=(sz,st='normal',c=DARK)=>{doc.setFontSize(sz);doc.setFont('helvetica',st);doc.setTextColor(...c);};
+    const hl=(y,c=LIGHT)=>{doc.setDrawColor(...c);doc.setLineWidth(0.25);doc.line(mg,y,pw-mg,y);};
+    const fr=(x,y,w,h,c)=>{doc.setFillColor(...c);doc.rect(x,y,w,h,'F');};
+
+    // Cover
+    fr(0,0,pw,50,GREEN);
+    sf(22,'bold',[255,255,255]);doc.text('GST Period Report',mg,20);
+    sf(10,'normal',[200,240,200]);
+    if(settings.bizname)doc.text(settings.bizname,mg,28);
+    if(settings.gstn)doc.text('GST# '+settings.gstn,mg,34);
+    doc.text('Period: '+fmtPeriod(period),mg,40);
+    doc.text('Generated: '+new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'}),mg,46);
+
+    const total=pR.reduce((s,r)=>s+r.amount,0);
+    const gstTotal=pR.reduce((s,r)=>s+gstForReceipt(r),0);
+    const allSorted=mileage.slice().sort((a,b)=>a.date.localeCompare(b.date));
+    let cumKmB=0;allSorted.forEach(m=>{const d=new Date(m.date+'T12:00:00');if(d<period.start)cumKmB+=m.km;});
+    let cumKmC=cumKmB;
+    const pM=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=period.start&&d<=period.end;});
+    const mileVal=pM.slice().sort((a,b)=>a.date.localeCompare(b.date)).reduce((s,m)=>{const v=calcMileValue(m.km,cumKmC);cumKmC+=m.km;return s+v;},0);
+
+    const bw=(cw-15)/4;
+    [['Total Spend','$'+total.toFixed(2)],['Receipts',String(pR.length)],['GST Claimable','$'+gstTotal.toFixed(2)],['Mileage','$'+mileVal.toFixed(2)]].forEach(([l,v],i)=>{
+      const bx=mg+i*(bw+5),by=56;
+      fr(bx,by,bw,20,BG);sf(6,'bold',MID);doc.text(l.toUpperCase(),bx+2,by+6);sf(11,'bold',DARK);doc.text(v,bx+2,by+15);
+    });
+
+    let cy=86;sf(8,'bold',MID);doc.text('RECEIPTS THIS PERIOD',mg,cy);cy+=4;hl(cy);cy+=5;
+
+    // One page per receipt
+    for(let i=0;i<pR.length;i++){
+      const r=pR[i];
+      if(i>0)doc.addPage();else{cy+=2;}
+      if(i>0){
+        fr(0,0,pw,16,BG);
+        sf(7,'bold',MID);doc.text(`RECEIPT ${i+1} OF ${pR.length}`,mg,6);
+        sf(13,'bold',DARK);doc.text(r.vendor,mg,13);
+        sf(13,'bold',GREEN);doc.text('$'+r.amount.toFixed(2),pw-mg,13,{align:'right'});
+        cy=22;
+      } else {
+        fr(mg,cy-4,cw,16,BG);
+        sf(7,'bold',MID);doc.text(`RECEIPT ${i+1} OF ${pR.length}`,mg+2,cy+0);
+        sf(13,'bold',DARK);doc.text(r.vendor,mg+2,cy+8);
+        sf(13,'bold',GREEN);doc.text('$'+r.amount.toFixed(2),pw-mg,cy+8,{align:'right'});
+        cy+=20;
+      }
+      const gst=gstForReceipt(r);
+      const claimable=claimableForReceipt(r);
+      const c=catBy(r.category);
+      const hw=(cw-6)/2;
+      const fields=[['Date',fmtDate(r.date)],['Category',c.label],['Claimable','$'+claimable.toFixed(2)],['GST','$'+gst.toFixed(2)],['Invoice #',r.invoice||'—'],['Supplier GST#',r.suppgst||'—']];
+      for(let fi=0;fi<fields.length;fi+=2){
+        if(cy>278){doc.addPage();cy=mg;}
+        fields.slice(fi,fi+2).forEach(([lbl,val],col)=>{
+          const fx=mg+col*(hw+6);
+          fr(fx,cy-3,hw,8,col===0?[248,248,246]:[244,244,242]);
+          sf(6,'bold',MID);doc.text(lbl.toUpperCase(),fx+2,cy+0);
+          sf(8,'normal',DARK);doc.text(String(val).substring(0,36),fx+2,cy+5);
+        });cy+=10;
+      }
+      if(r.notes){fr(mg,cy-3,cw,8,BG);sf(6,'bold',MID);doc.text('PURPOSE',mg+2,cy);const nl=doc.splitTextToSize(r.notes,cw-4);sf(8,'normal',DARK);doc.text(nl,mg+2,cy+5);cy+=Math.max(10,nl.length*4+7);}
+      cy+=3;hl(cy);cy+=5;
+      if(r.image){
+        try{
+          await new Promise(res=>{
+            const img=new Image();img.onload=()=>{
+              const asp=img.naturalWidth/img.naturalHeight;
+              const maxW=cw,maxH=ph-cy-16;
+              let dw,dh;if(asp>=maxW/maxH){dw=maxW;dh=maxW/asp;}else{dh=maxH;dw=maxH*asp;}
+              if(cy+dh>ph-14){doc.addPage();cy=mg;}
+              sf(7,'bold',MID);doc.text('RECEIPT IMAGE',mg,cy);cy+=4;
+              doc.addImage(r.image,'JPEG',mg+(cw-dw)/2,cy,dw,dh,undefined,'FAST');cy+=dh+4;res();
+            };img.onerror=res;img.src=r.image;
+          });
+        }catch(e){}
+      }
+      sf(7,'normal',[180,180,180]);doc.text(`ID: ${r.id}  ·  ${settings.bizname||'NZ Receipt Tracker'}  ·  GST# ${settings.gstn||'—'}`,pw/2,ph-6,{align:'center'});
+    }
+    doc.save(`GST_report_${getPeriodLabel()}.pdf`);
+    showToast(`PDF — ${pR.length} receipts`);
+  }catch(e){showToast('PDF error: '+e.message);console.error(e);}
+}
+
+/* ── CSV ── */
+function buildCSV(){
+  const rows=[['Receipt ID','Receipt File','Date','Vendor','Amount (NZD)','Claimable Amount','GST Amount','GST Included','Entertainment 50% Rule','Invoice #','Supplier GST #','Your GST #','Category','Reconciled','Business Purpose']];
+  receipts.forEach(r=>{
+    const gst=gstForReceipt(r);
+    const claimable=claimableForReceipt(r);
+    const cat=catBy(r.category);
+    const isEnt=CATS.find(c=>c.id===r.category)?.entertainment||false;
+    rows.push([r.id,r.image?(r.image.startsWith('data:application/pdf')?`receipt_${r.id}.pdf`:`receipt_${r.id}.jpg`):'no_image',r.date,r.vendor,'$'+r.amount.toFixed(2),'$'+claimable.toFixed(2),'$'+gst.toFixed(2),r.gst==='yes'?'Yes':r.gst==='partial'?'Partial':'No',isEnt?'Yes':'No',r.invoice||'',r.suppgst||'',settings.gstn||'',cat.label,r.reconciled?'Yes':'No',r.notes||'']);
+  });
+  return rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+}
+function exportCSV(){
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(buildCSV());
+  a.download=`receipts_${FY.label.replace(/\s/g,'_')}.csv`;a.click();showToast('CSV downloaded');
+}
+
+/* ── ZIP ── */
+async function exportZip(){
+  if(!receipts.length){showToast('No receipts to export');return;}
+  const btn=document.getElementById('btn-zip');btn.disabled=true;btn.textContent='⏳...';
+  try{
+    const zip=new JSZip();
+    zip.file(`receipts_${FY.label.replace(/\s/g,'_')}.csv`,buildCSV());
+
+    // Mileage CSV with Tier 1/2 rates
+    if(mileage.length){
+      const t1=settings.milerate||1.17, t2=settings.milerate2||0.37;
+      const mRows=[['Date','From','To','Odo Start (km)','Odo End (km)','Distance (km)','Tier','Tier 1 Rate ($/km)','Tier 2 Rate ($/km)','Claimable ($)','Business Purpose']];
+      let cumKmZ=0;
+      mileage.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>{
+        const v=calcMileValue(m.km,cumKmZ);
+        const tier=cumKmZ+m.km<=14000?'T1':(cumKmZ>=14000?'T2':'T1+T2');
+        cumKmZ+=m.km;
+        mRows.push([m.date,m.from,m.to,m.odoStart!=null?m.odoStart:'',m.odoEnd!=null?m.odoEnd:'',m.km,tier,t1.toFixed(2),t2.toFixed(2),'$'+v.toFixed(2),m.purpose||'']);
+      });
+      zip.file('mileage_log.csv',mRows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'));
+    }
+
+    const folder=zip.folder('receipt_images');
+    let n=0;
+    receipts.forEach(r=>{if(r.image){const ext=r.image.startsWith('data:application/pdf')?'pdf':'jpg';folder.file(`receipt_${r.id}.${ext}`,r.image.split(',')[1],{base64:true});n++;}});
+    zip.file('README.txt',`NZ Receipt Tracker Export\nBusiness: ${settings.bizname||'—'}\nGST#: ${settings.gstn||'—'}\nFY: ${FY.range}\nReceipts: ${receipts.length} | Images: ${n}\nMileage trips: ${mileage.length}\n`);
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`receipts_${FY.label.replace(/\s/g,'_')}.zip`;a.click();
+    URL.revokeObjectURL(url);showToast(`ZIP — ${n} photos + CSV + mileage`);
+  }catch(e){showToast('ZIP failed: '+e.message);}
+  btn.disabled=false;btn.innerHTML='📦 ZIP';
+}
+
+/* ── PDF ── */
+async function exportPDF(){
+  if(!receipts.length){showToast('No receipts to export');return;}
+  const btn=document.getElementById('btn-pdf');btn.disabled=true;btn.textContent='⏳...';
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const pw=210,ph=297,mg=14,cw=182;
+    const GREEN=[36,138,61],DARK=[20,20,20],MID=[110,110,110],LIGHT=[210,210,210],BG=[245,245,242];
+    const sf=(sz,st='normal',c=DARK)=>{doc.setFontSize(sz);doc.setFont('helvetica',st);doc.setTextColor(...c);};
+    const hl=(y,c=LIGHT)=>{doc.setDrawColor(...c);doc.setLineWidth(0.25);doc.line(mg,y,pw-mg,y);};
+    const fr=(x,y,w,h,c)=>{doc.setFillColor(...c);doc.rect(x,y,w,h,'F');};
+
+    /* COVER */
+    fr(0,0,pw,55,GREEN);
+    sf(24,'bold',[255,255,255]);doc.text('Expense Report',mg,21);
+    sf(10,'normal',[200,240,200]);
+    if(settings.bizname)doc.text(settings.bizname,mg,29);
+    if(settings.gstn)doc.text('GST# '+settings.gstn,mg,35);
+    doc.text('Financial Year: '+FY.range,mg,41);
+    doc.text('Generated: '+new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'}),mg,47);
+
+    const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+    const total=fyR.reduce((s,r)=>s+r.amount,0);
+    const gstTotal=fyR.reduce((s,r)=>s+gstForReceipt(r),0);
+    // Mileage with Tier 1/2 for full FY
+    const fyMile=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=FY.start&&d<=FY.end;}).sort((a,b)=>a.date.localeCompare(b.date));
+    const totalKmFY=fyMile.reduce((s,m)=>s+m.km,0);
+    let cumKmPDF=0;
+    const mileVal=fyMile.reduce((s,m)=>{const v=calcMileValue(m.km,cumKmPDF);cumKmPDF+=m.km;return s+v;},0);
+
+    const boxes=[['Total Spend','$'+total.toFixed(2)],['Receipts',String(fyR.length)],['GST Claimable','$'+gstTotal.toFixed(2)],['Mileage','$'+mileVal.toFixed(2)]];
+    const bw=(cw-15)/4;
+    boxes.forEach(([lbl,val],i)=>{
+      const bx=mg+i*(bw+5),by=60;
+      fr(bx,by,bw,22,BG);
+      sf(6,'bold',MID);doc.text(lbl.toUpperCase(),bx+2,by+7);
+      sf(11,'bold',DARK);doc.text(val,bx+2,by+17);
+    });
+
+    let cy=92;
+    sf(8,'bold',MID);doc.text('CATEGORY BREAKDOWN',mg,cy);cy+=5;hl(cy);cy+=5;
+    CATS.map(c=>({...c,sum:fyR.filter(r=>r.category===c.id).reduce((s,r)=>s+r.amount,0)})).filter(c=>c.sum>0).sort((a,b)=>b.sum-a.sum).forEach(c=>{
+      if(cy>275){doc.addPage();cy=mg;}
+      fr(mg,cy-4,cw,7,BG);
+      sf(9,'normal',DARK);doc.text(c.label,mg+2,cy+0.5);
+      const gstC=fyR.filter(r=>r.category===c.id).reduce((s,r)=>s+gstForReceipt(r),0);
+      sf(8,'normal',MID);doc.text('GST: $'+gstC.toFixed(2),pw-mg-42,cy+0.5);
+      sf(9,'bold',DARK);doc.text('$'+c.sum.toFixed(2),pw-mg,cy+0.5,{align:'right'});
+      cy+=8;
+    });
+    cy+=4;hl(cy,GREEN);cy+=6;
+    sf(10,'bold',GREEN);doc.text('Total GST claimable on purchases',mg,cy);
+    sf(10,'bold',GREEN);doc.text('$'+gstTotal.toFixed(2),pw-mg,cy,{align:'right'});
+
+    /* MILEAGE SUMMARY */
+    if(mileage.length){
+      cy+=10;
+      sf(8,'bold',MID);doc.text('MILEAGE LOG SUMMARY',mg,cy);cy+=5;hl(cy);cy+=5;
+      const t1=settings.milerate||1.17, t2=settings.milerate2||0.37;
+      sf(9,'normal',DARK);doc.text(`${totalKmFY.toFixed(0)} km (T1 $${t1.toFixed(2)}/km · T2 $${t2.toFixed(2)}/km)`,mg,cy);
+      sf(9,'bold',DARK);doc.text('$'+mileVal.toFixed(2),pw-mg,cy,{align:'right'});
+    }
+
+    /* ONE PAGE PER RECEIPT */
+    for(let i=0;i<receipts.length;i++){
+      const r=receipts[i];doc.addPage();
+      const gst=gstForReceipt(r);
+      const claimable=claimableForReceipt(r);
+      const c=catBy(r.category);
+      const isEnt=CATS.find(x=>x.id===r.category)?.entertainment||false;
+      fr(0,0,pw,20,BG);
+      sf(7,'bold',MID);doc.text(`RECEIPT ${i+1} OF ${receipts.length}`,mg,7);
+      sf(15,'bold',DARK);doc.text(r.vendor,mg,15);
+      sf(15,'bold',GREEN);doc.text('$'+r.amount.toFixed(2),pw-mg,15,{align:'right'});
+
+      let ry=26;
+      const hw=(cw-6)/2;
+      const fields=[
+        ['Date',fmtDate(r.date)],['Category',c.label+(isEnt?' ⚠ 50% rule':'')],
+        ['Claimable amount','$'+claimable.toFixed(2)],['GST amount','$'+gst.toFixed(2)],
+        ['GST included',r.gst==='yes'?'Yes':r.gst==='partial'?'Partial':'No'],['Reconciled',r.reconciled?'Yes':'No'],
+        ['Invoice #',r.invoice||'—'],['Supplier GST #',r.suppgst||'—'],
+        ['Your GST #',settings.gstn||'—'],['Receipt file',r.image?(`receipt_${r.id}.${r.image.startsWith('data:application/pdf')?'pdf':'jpg'}`):'—'],
+      ];
+      for(let fi=0;fi<fields.length;fi+=2){
+        const row=fields.slice(fi,fi+2);
+        row.forEach(([lbl,val],col)=>{
+          const fx=mg+col*(hw+6);
+          fr(fx,ry-4,hw,9,col===0?[248,248,246]:[244,244,242]);
+          sf(6,'bold',MID);doc.text(lbl.toUpperCase(),fx+2,ry);
+          sf(8,'normal',DARK);doc.text(String(val).substring(0,38),fx+2,ry+5);
+        });
+        ry+=11;
+      }
+      if(r.notes){
+        fr(mg,ry-4,cw,9,BG);
+        sf(6,'bold',MID);doc.text('BUSINESS PURPOSE',mg+2,ry);
+        const lines=doc.splitTextToSize(r.notes,cw-4);
+        sf(8,'normal',DARK);doc.text(lines,mg+2,ry+5);
+        ry+=Math.max(11,lines.length*4+7);
+      }
+      ry+=4;hl(ry);ry+=6;
+
+      if(r.image){
+        try{
+          await new Promise(res=>{
+            const img=new Image();
+            img.onload=()=>{
+              const natW=img.naturalWidth||1200,natH=img.naturalHeight||900,aspect=natW/natH;
+              const maxW=cw,maxH=ph-ry-16;
+              let dw,dh;
+              if(aspect>=(maxW/maxH)){dw=maxW;dh=maxW/aspect;}else{dh=maxH;dw=maxH*aspect;}
+              if(ry+dh>ph-14){doc.addPage();ry=mg;const mH2=ph-ry-16;if(aspect>=(maxW/mH2)){dw=maxW;dh=maxW/aspect;}else{dh=mH2;dw=mH2*aspect;}}
+              sf(7,'bold',MID);doc.text('RECEIPT IMAGE',mg,ry);ry+=4;
+              doc.addImage(r.image,'JPEG',mg+(cw-dw)/2,ry,dw,dh,undefined,'FAST');
+              ry+=dh+4;res();
+            };
+            img.onerror=res;img.src=r.image;
+          });
+        }catch(e){sf(8,'normal',MID);doc.text('[Image unavailable]',mg,ry);}
+      } else {
+        fr(mg,ry,cw,16,[245,245,242]);sf(9,'normal',MID);doc.text('No receipt image attached',pw/2,ry+10,{align:'center'});ry+=20;
+      }
+      sf(7,'normal',[180,180,180]);doc.text(`ID: ${r.id}  ·  ${settings.bizname||'NZ Receipt Tracker'}  ·  GST# ${settings.gstn||'—'}  ·  ${FY.label}`,pw/2,ph-6,{align:'center'});
+    }
+
+    /* MILEAGE PAGES */
+    if(mileage.length){
+      doc.addPage();
+      fr(0,0,pw,20,BG);
+      sf(14,'bold',DARK);doc.text('Vehicle / Mileage Log',mg,13);
+      const vehLabel=(settings.vehicle||'Vehicle')+' · '+{petrol:'Petrol',diesel:'Diesel',hybrid:'Hybrid',electric:'Electric'}[settings.fueltype||'petrol'];
+      sf(10,'normal',MID);doc.text(vehLabel,pw-mg,13,{align:'right'});
+      let my=28;
+      sf(7,'bold',MID);
+      doc.text('DATE',mg,my);doc.text('FROM',mg+25,my);doc.text('TO',mg+72,my);doc.text('ODO START',mg+118,my);doc.text('ODO END',mg+142,my);doc.text('KM',mg+162,my,{align:'right'});doc.text('CLAIMABLE',pw-mg,my,{align:'right'});
+      my+=3;hl(my);my+=5;
+      const t1r=settings.milerate||1.17, t2r=settings.milerate2||0.37;
+      let cumKmLog=0;
+      mileage.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>{
+        if(my>280){doc.addPage();my=mg;}
+        const tripVal=calcMileValue(m.km,cumKmLog);
+        const tier=cumKmLog+m.km<=14000?'T1':(cumKmLog>=14000?'T2':'T1+T2');
+        cumKmLog+=m.km;
+        sf(8,'normal',DARK);
+        doc.text(fmtDate(m.date),mg,my);
+        doc.text(String(m.from).substring(0,20),mg+25,my);
+        doc.text(String(m.to).substring(0,20),mg+72,my);
+        doc.text(m.odoStart!=null?m.odoStart.toLocaleString():'—',mg+118,my);
+        doc.text(m.odoEnd!=null?m.odoEnd.toLocaleString():'—',mg+142,my);
+        doc.text(m.km.toFixed(1)+' ('+tier+')',mg+162,my,{align:'right'});
+        doc.text('$'+tripVal.toFixed(2),pw-mg,my,{align:'right'});
+        if(m.purpose){sf(7,'normal',MID);doc.text(m.purpose.substring(0,60),mg+25,my+4);}
+        my+=m.purpose?10:7;
+      });
+      my+=4;hl(my,GREEN);my+=6;
+      sf(10,'bold',GREEN);
+      const allKm=mileage.reduce((s,m)=>s+m.km,0);
+      let cumFin=0;const allVal=mileage.slice().sort((a,b)=>a.date.localeCompare(b.date)).reduce((s,m)=>{const v=calcMileValue(m.km,cumFin);cumFin+=m.km;return s+v;},0);
+      doc.text(`Total: ${allKm.toFixed(0)} km · T1 $${t1r.toFixed(2)}/km · T2 $${t2r.toFixed(2)}/km`,mg,my);
+      doc.text('$'+allVal.toFixed(2),pw-mg,my,{align:'right'});
+    }
+
+    doc.save(`expense_report_${FY.label.replace(/\s/g,'_')}.pdf`);
+    showToast('PDF saved');
+  }catch(e){showToast('PDF error: '+e.message);console.error(e);}
+  btn.disabled=false;btn.innerHTML='📄 PDF';
+}
+
+/* ── INIT ── */
+updateStats();
+</script>
+</body>
+</html>
