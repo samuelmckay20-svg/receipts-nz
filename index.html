@@ -691,11 +691,11 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 <!-- SETTINGS MODAL -->
 <div class="modal-bg" id="settings-bg" onclick="closeModal('settings')"></div>
 <div class="modal" id="modal-settings">
-  <div class="modal-hdr">
-    <div class="modal-handle" style="margin:8px auto 4px;"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 8px;">
+  <div class="modal-hdr" style="flex-direction:column;padding:0;">
+    <div class="modal-handle" style="margin:10px auto 6px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 10px;width:100%;box-sizing:border-box;">
       <div class="modal-title">Settings</div>
-      <button class="modal-close" onclick="closeModal('settings')">← Back</button>
+      <button class="modal-close" onclick="saveSettings();closeModal('settings')" style="font-size:15px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;font-family:inherit;padding:6px 0 6px 16px;">Save & Close</button>
     </div>
   </div>
   <div style="padding:0 0 8px;">
