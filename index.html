@@ -15,7 +15,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
   --safe-top: env(safe-area-inset-top, 44px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-bottom: 0px;
   --accent: #34C759; --accent-dark: #248A3D; --accent-bg: rgba(52,199,89,0.12);
   --blue: #007AFF; --red: #FF3B30; --orange: #FF9500; --purple: #AF52DE;
   --bg: #F2F2F7; --surface: #FFFFFF;
@@ -220,7 +220,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 .cb-fill { height:100%; border-radius:4px; }
 
 /* TABBAR */
-.tabbar { background:rgba(242,242,247,0.92); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px); border-top:0.5px solid var(--sep-l); display:flex; padding-bottom:var(--safe-bottom); flex-shrink:0; position:relative; z-index:100; }
+.tabbar { background:rgba(242,242,247,0.92); -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px); border-top:0.5px solid var(--sep-l); display:flex; padding-bottom:0; flex-shrink:0; position:relative; z-index:100; }
 @media(prefers-color-scheme:dark){ .tabbar{background:rgba(0,0,0,0.92);} }
 .tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px 4px; border:none; background:none; cursor:pointer; font-family:inherit; color:var(--text3); }
 .tab.on { color:var(--accent); }
