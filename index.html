@@ -2598,6 +2598,8 @@ async function exportPDF(){
 /* ── INIT ── */
 updateStats();
 renderList();
+// Fix iOS PWA scroll position on load
+window.scrollTo(0, document.body.scrollHeight);
 </script>
 </body>
 </html>
