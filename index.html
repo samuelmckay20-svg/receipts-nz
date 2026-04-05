@@ -291,20 +291,21 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="fy-chip" id="fy-chip"></div>
+        <button class="nav-settings-btn" id="refresh-btn" onclick="manualRefresh()" title="Sync from Synology">🔄</button>
         <button class="nav-settings-btn" onclick="openSettings()" title="Settings">⚙️</button>
       </div>
     </div>
   </div>
 
   <div class="scroller" id="scroller">
-    <div class="sum-row" id="sum-row" style="display:none">
+    <div class="sum-row" id="sum-row" style="display:grid">
       <div class="sum-card"><div class="sum-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
       <div class="sum-card"><div class="sum-lbl">GST back</div><div class="sum-val amber" id="s-gst">$0.00</div></div>
       <div class="sum-card"><div class="sum-lbl">Reconciled</div><div class="sum-val" id="s-recon">0/0</div></div>
     </div>
 
     <!-- ADD PANEL -->
-    <div id="p-add">
+    <div id="p-add" style="display:none">
       <div class="capture-card" style="margin-top:14px;">
         <div class="photo-prev-wrap" id="prev-wrap" style="display:none">
           <img id="prev-img" class="photo-prev" alt="Receipt" onclick="viewImg(null,'Receipt preview')">
@@ -448,7 +449,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     </div>
 
     <!-- LIST PANEL -->
-    <div id="p-list" style="display:none">
+    <div id="p-list">
       <div class="filt-row" id="filt-row"></div>
       <div class="exp-row">
         <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Export:</span>
@@ -549,8 +550,8 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
   </div><!-- scroller -->
 
   <nav class="tabbar">
-    <button class="tab on" id="t-add" onclick="goTab('add')"><span class="tab-ico">＋</span><span class="tab-lbl">Add</span></button>
-    <button class="tab" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
+    <button class="tab" id="t-add" onclick="goTab('add')"><span class="tab-ico">＋</span><span class="tab-lbl">Add</span></button>
+    <button class="tab on" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
     <button class="tab" id="t-mile" onclick="goTab('mile')"><span class="tab-ico">🚗</span><span class="tab-lbl">Mileage</span></button>
     <button class="tab" id="t-gst" onclick="goTab('gst')"><span class="tab-ico">📊</span><span class="tab-lbl">GST</span></button>
   </nav>
@@ -690,10 +691,12 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 <!-- SETTINGS MODAL -->
 <div class="modal-bg" id="settings-bg" onclick="closeModal('settings')"></div>
 <div class="modal" id="modal-settings">
-  <div class="modal-handle"></div>
   <div class="modal-hdr">
-    <div class="modal-title">Settings</div>
-    <button class="modal-close" onclick="closeModal('settings')">← Back</button>
+    <div class="modal-handle" style="margin:8px auto 4px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 8px;">
+      <div class="modal-title">Settings</div>
+      <button class="modal-close" onclick="closeModal('settings')">← Back</button>
+    </div>
   </div>
   <div style="padding:0 0 8px;">
     <div class="shdr">AI receipt scanner</div>
@@ -967,6 +970,25 @@ function save(){
   }catch(e){}
   // Sync to Synology in background — don't await so UI stays fast
   syncToServer();
+}
+
+async function manualRefresh(){
+  const {url,secret}=getSyncConfig();
+  if(!url||!secret){showToast('Set up Synology backup in Settings first');return;}
+  const btn=document.getElementById('refresh-btn');
+  btn.textContent='⏳';btn.disabled=true;
+  const ok=await loadFromServer();
+  btn.textContent='🔄';btn.disabled=false;
+  if(ok){
+    showToast('✓ Data refreshed from Synology');
+    const active=['add','list','mile','gst'].find(t=>document.getElementById('p-'+t).style.display!=='none');
+    if(active==='list')renderList();
+    if(active==='mile')renderMileage();
+    if(active==='gst')renderGST();
+    updateStats();
+  } else {
+    showToast('Could not reach Synology');
+  }
 }
 
 /* ── FY ── */
@@ -2355,6 +2377,7 @@ async function exportPDF(){
 
 /* ── INIT ── */
 updateStats();
+renderList();
 </script>
 </body>
 </html>
