@@ -240,10 +240,10 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 /* MODALS */
 .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
 .modal-bg.open { display:block; }
-.modal { position:fixed; bottom:0; left:0; right:0; z-index:201; background:var(--bg); border-radius:24px 24px 0 0; padding-bottom:var(--safe-bottom); max-height:calc(100vh - var(--safe-top) - 16px); overflow-y:auto; -webkit-overflow-scrolling:touch; transform:translateY(100%); transition:transform .3s cubic-bezier(.32,1,.23,1); }
+.modal { position:fixed; bottom:0; left:0; right:0; z-index:201; background:var(--bg); border-radius:24px 24px 0 0; padding-bottom:var(--safe-bottom); max-height:92vh; overflow-y:auto; -webkit-overflow-scrolling:touch; transform:translateY(100%); transition:transform .3s cubic-bezier(.32,1,.23,1); }
 .modal.open { transform:translateY(0); }
-.modal-handle { width:36px; height:5px; border-radius:3px; background:var(--fill2); margin:8px auto 0; display:block; }
-.modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:10px 20px 10px; border-bottom:0.5px solid var(--sep-l); background:var(--bg); position:sticky; top:-1px; z-index:10; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+.modal-handle { width:36px; height:5px; border-radius:3px; background:var(--fill2); margin:12px auto 0; display:block; }
+.modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:0.5px solid var(--sep-l); background:var(--bg); position:sticky; top:0; z-index:10; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
 .modal-title { font-size:17px; font-weight:700; letter-spacing:-0.4px; }
 .modal-close { font-size:15px; font-weight:600; color:var(--blue); background:none; border:none; cursor:pointer; font-family:inherit; }
 
@@ -456,6 +456,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
         <button class="exp-btn grn" id="btn-zip" onclick="exportZip()">📦 ZIP</button>
         <button class="exp-btn" id="btn-pdf" onclick="exportPDF()">📄 PDF</button>
         <button class="exp-btn" id="btn-csv" onclick="exportCSV()">⬇ CSV</button>
+        <button class="exp-btn" onclick="openBin()" style="background:rgba(255,59,48,.1);color:var(--red);">🗑 Bin</button>
       </div>
       <div id="r-list"></div>
       <div class="empty" id="r-empty" style="display:none">
@@ -576,13 +577,24 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 
 <!-- EDIT RECEIPT MODAL -->
 <div class="modal-bg" id="modal-bg" onclick="closeModal('edit')"></div>
-<div class="modal" id="modal-edit">
+<!-- BIN MODAL -->
+<div class="modal-bg" id="bin-bg" onclick="closeModal('bin')"></div>
+<div class="modal" id="modal-bin">
+  <div class="modal-handle"></div>
   <div class="modal-hdr">
-    <div class="modal-handle" style="margin:8px auto 4px;"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 8px;">
-      <div class="modal-title"></div>
-      <button class="modal-close" onclick="closeModal('edit')">← Back</button>
-    </div>
+    <button class="modal-close" onclick="closeModal('bin')">← Back</button>
+    <div class="modal-title">🗑 Bin</div>
+    <button onclick="emptyBin()" style="font-size:13px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;font-weight:600;">Empty</button>
+  </div>
+  <div id="bin-list" style="padding:12px 16px;"></div>
+  <div class="pb"></div>
+</div>
+<div class="modal" id="modal-edit">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <button class="modal-close" onclick="closeModal('edit')">← Back</button>
+    <div class="modal-title"></div>
+    <div style="width:60px;"></div>
   </div>
   <div style="padding:0 0 8px;">
     <div style="margin:0 16px 8px;background:var(--surface);border-radius:16px;overflow:hidden;">
@@ -691,12 +703,11 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 <!-- SETTINGS MODAL -->
 <div class="modal-bg" id="settings-bg" onclick="closeModal('settings')"></div>
 <div class="modal" id="modal-settings">
-  <div class="modal-hdr" style="flex-direction:column;padding:0;">
-    <div class="modal-handle" style="margin:10px auto 6px;"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 10px;width:100%;box-sizing:border-box;">
-      <div class="modal-title">Settings</div>
-      <button class="modal-close" onclick="saveSettings();closeModal('settings')" style="font-size:15px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;font-family:inherit;padding:6px 0 6px 16px;">Save & Close</button>
-    </div>
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <button class="modal-close" onclick="closeModal('settings')">← Back</button>
+    <div class="modal-title">Settings</div>
+    <div style="width:60px;"></div>
   </div>
   <div style="padding:0 0 8px;">
     <div class="shdr">AI receipt scanner</div>
@@ -802,8 +813,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 <div class="modal" id="modal-mile">
   <div class="modal-handle"></div>
   <div class="modal-hdr">
-    <div class="modal-title" id="mile-modal-title">Add Trip</div>
     <button class="modal-close" onclick="closeModal('mile')">← Back</button>
+    <div class="modal-title" id="mile-modal-title">Add Trip</div>
+    <div style="width:60px;"></div>
   </div>
   <div style="padding:0 0 8px;">
     <div class="g-list">
@@ -900,6 +912,7 @@ let settings={bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fue
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 receipts=load('nzrt5_r',[]);
 mileage=load('nzrt5_m',[]);
+bin=load('nzrt5_bin',[]);
 settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37},load('nzrt5_s',{}));
 
 /* ── SYNOLOGY SYNC ── */
@@ -922,7 +935,7 @@ async function syncToServer(){
     const res=await fetch(url+'/sync',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-secret':secret},
-      body:JSON.stringify({receipts, mileage:mileage, settings})
+      body:JSON.stringify({receipts, mileage:mileage, settings, bin})
     });
     if(res.ok){
       setSyncStatus('✓ Synced to Synology '+new Date().toLocaleTimeString('en-NZ'),true);
@@ -946,6 +959,7 @@ async function loadFromServer(){
     if(data.receipts) receipts=data.receipts;
     if(data.mileage) mileage=data.mileage;
     if(data.settings) settings=Object.assign(settings,data.settings);
+    if(data.bin) bin=data.bin;
     save(); // persist to localStorage as cache
     updateStats();
     setSyncStatus('✓ Loaded from Synology', true);
@@ -967,6 +981,7 @@ function save(){
     localStorage.setItem('nzrt5_r',JSON.stringify(receipts));
     localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
     localStorage.setItem('nzrt5_s',JSON.stringify(settings));
+    localStorage.setItem('nzrt5_bin',JSON.stringify(bin));
   }catch(e){}
   // Sync to Synology in background — don't await so UI stays fast
   syncToServer();
@@ -1228,6 +1243,59 @@ function closeModal(which){
   if(which==='edit'){document.getElementById('modal-edit').classList.remove('open');document.getElementById('modal-bg').classList.remove('open');editId=null;}
   if(which==='settings'){document.getElementById('modal-settings').classList.remove('open');document.getElementById('settings-bg').classList.remove('open');}
   if(which==='mile'){document.getElementById('modal-mile').classList.remove('open');document.getElementById('mile-bg').classList.remove('open');editMileId=null;}
+  if(which==='bin'){document.getElementById('modal-bin').classList.remove('open');document.getElementById('bin-bg').classList.remove('open');}
+}
+
+function openBin(){
+  renderBin();
+  document.getElementById('bin-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-bin').classList.add('open'),10);
+}
+
+function renderBin(){
+  const el=document.getElementById('bin-list');
+  if(!bin.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 0;color:var(--text3);"><div style="font-size:40px;margin-bottom:12px;">🗑</div><div style="font-weight:600;">Bin is empty</div><div style="font-size:13px;margin-top:6px;">Deleted receipts appear here</div></div>';
+    return;
+  }
+  el.innerHTML=bin.map((r,i)=>`
+    <div style="background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div style="font-size:15px;font-weight:600;">${r.vendor||'Unknown'}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${fmtDate(r.date)} · Deleted ${new Date(r.deletedAt).toLocaleDateString('en-NZ')}</div>
+        </div>
+        <div style="font-size:17px;font-weight:700;">$${Number(r.amount).toFixed(2)}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="restoreFromBin(${i})" style="flex:1;padding:10px;border-radius:10px;border:none;background:rgba(52,199,89,.12);color:var(--accent-dark);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">↩ Restore</button>
+        <button onclick="permanentDelete(${i})" style="flex:1;padding:10px;border-radius:10px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">🗑 Delete permanently</button>
+      </div>
+    </div>`).join('');
+}
+
+function restoreFromBin(i){
+  const r=bin[i];
+  delete r.deletedAt;
+  receipts.unshift(r);
+  bin.splice(i,1);
+  save();updateStats();renderBin();renderList();
+  showToast('Receipt restored ✓');
+}
+
+function permanentDelete(i){
+  if(!confirm('Permanently delete this receipt? This cannot be undone.'))return;
+  bin.splice(i,1);
+  save();renderBin();
+  showToast('Permanently deleted');
+}
+
+function emptyBin(){
+  if(!bin.length){showToast('Bin is already empty');return;}
+  if(!confirm('Permanently delete all '+bin.length+' receipts in the bin? This cannot be undone.'))return;
+  bin=[];
+  save();renderBin();
+  showToast('Bin emptied');
 }
 
 /* ── CAMERA ── */
@@ -1599,9 +1667,14 @@ function saveEdit(){
   save();updateStats();closeModal('edit');renderList();
 }
 function confirmDelete(){
-  if(!confirm('Delete this receipt?'))return;
+  if(!confirm('Move this receipt to the bin? You can recover it later.'))return;
+  const r=receipts.find(x=>x.id===editId);
+  if(r){
+    bin.unshift({...r, deletedAt:new Date().toISOString()});
+  }
   receipts=receipts.filter(r=>r.id!==editId);
   save();updateStats();closeModal('edit');renderList();
+  showToast('Moved to bin');
 }
 
 /* ── RENDER LIST ── */
