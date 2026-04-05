@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Receipts">
@@ -36,9 +35,10 @@
     --warn-bg: rgba(255,149,0,0.15); --warn-text: #FFB340;
   }
 }
-html, body { height:100%; margin:0; padding:0; overflow:hidden; background:var(--bg); font-family:-apple-system,'SF Pro Text',system-ui,sans-serif; color:var(--text1); -webkit-font-smoothing:antialiased; }
+html { height: -webkit-fill-available; }
+body { min-height: 100vh; min-height: -webkit-fill-available; margin:0; overflow:hidden; background:var(--bg); font-family:-apple-system,'SF Pro Text',system-ui,sans-serif; color:var(--text1); -webkit-font-smoothing:antialiased; }
 /* Desktop/iPad: constrain to a centred column */
-.shell { display:flex; flex-direction:column; min-height:100%; min-height:100vh; min-height:-webkit-fill-available; max-width:600px; margin:0 auto; position:relative; }
+.shell { display:flex; flex-direction:column; height:100vh; height:-webkit-fill-available; max-width:600px; margin:0 auto; position:relative; overflow:hidden; }
 @media (min-width:600px){
   html,body { background:#e5e5ea; }
   .shell { box-shadow:0 0 40px rgba(0,0,0,.15); }
