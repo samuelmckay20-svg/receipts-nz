@@ -24,8 +24,7 @@
   --warn-bg: rgba(255,149,0,0.10); --warn-text: #7A4500;
 }
 @media all and (display-mode: standalone) {
-  .pb { height: 8px !important; }
-  .tabbar { padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px) !important; }
+  .tabbar { padding-bottom: env(safe-area-inset-bottom, 0px) !important; }
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -266,7 +265,7 @@ html, body { height:100%; height:100dvh; overflow:hidden; background:var(--bg); 
 .toast { position:fixed; bottom:calc(var(--safe-bottom) + 80px); left:50%; transform:translateX(-50%) translateY(20px); background:rgba(0,0,0,0.82); color:white; padding:10px 20px; border-radius:20px; font-size:13px; font-weight:500; z-index:9000; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-.pb { height:calc(var(--safe-bottom) + 8px); }
+.pb { height:16px; }
 .empty { text-align:center; padding:60px 24px; }
 .empty-ico { font-size:56px; margin-bottom:12px; }
 .empty-title { font-size:20px; font-weight:700; letter-spacing:-0.5px; margin-bottom:6px; }
