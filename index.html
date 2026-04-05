@@ -15,11 +15,6 @@
 :root {
   --safe-top: env(safe-area-inset-top, 44px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-}
-/* In PWA/standalone mode the browser toolbar is gone — no bottom padding needed */
-@media all and (display-mode: standalone) {
-  :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
-  .pb { height: 16px !important; }
   --accent: #34C759; --accent-dark: #248A3D; --accent-bg: rgba(52,199,89,0.12);
   --blue: #007AFF; --red: #FF3B30; --orange: #FF9500; --purple: #AF52DE;
   --bg: #F2F2F7; --surface: #FFFFFF;
@@ -27,6 +22,10 @@
   --sep-l: rgba(60,60,67,0.12);
   --fill2: rgba(120,120,128,0.14); --fill3: rgba(118,118,128,0.10);
   --warn-bg: rgba(255,149,0,0.10); --warn-text: #7A4500;
+}
+@media all and (display-mode: standalone) {
+  .pb { height: 8px !important; }
+  .tabbar { padding-bottom: env(safe-area-inset-bottom, 0px) !important; }
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -267,7 +266,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
 .toast { position:fixed; bottom:calc(var(--safe-bottom) + 80px); left:50%; transform:translateX(-50%) translateY(20px); background:rgba(0,0,0,0.82); color:white; padding:10px 20px; border-radius:20px; font-size:13px; font-weight:500; z-index:9000; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-.pb { height:calc(var(--safe-bottom) + 28px); }
+.pb { height:calc(var(--safe-bottom) + 8px); }
 .empty { text-align:center; padding:60px 24px; }
 .empty-ico { font-size:56px; margin-bottom:12px; }
 .empty-title { font-size:20px; font-weight:700; letter-spacing:-0.5px; margin-bottom:6px; }
@@ -595,7 +594,6 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
   <div class="modal-inner">
   <div id="bin-list" style="padding:12px 16px;"></div>
   <div class="pb"></div>
-  </div>
 </div>
 <div class="modal" id="modal-edit">
   <div class="modal-handle"></div>
@@ -706,7 +704,6 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     <button class="save-btn" onclick="saveEdit()">Save Changes</button>
     <button class="del-btn" onclick="confirmDelete()">Delete Receipt</button>
     <div class="pb"></div>
-  </div>
   </div>
 </div>
 
@@ -880,7 +877,6 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     <button class="save-btn" onclick="saveMileage()">Save Trip</button>
     <button class="del-btn" id="mile-del-btn" style="display:none" onclick="deleteMileage()">Delete Trip</button>
     <div class="pb"></div>
-  </div>
   </div>
 </div>
 
@@ -1194,8 +1190,8 @@ function goTab(t){
     document.getElementById('p-'+n).style.display=n===t?'block':'none';
     document.getElementById('t-'+n).classList.toggle('on',n===t);
   });
-  // Hide summary cards on Add tab, show on all others
-  document.getElementById('sum-row').style.display=t==='add'?'none':'grid';
+  // Summary cards only on receipts tab
+  document.getElementById('sum-row').style.display=t==='list'?'grid':'none';
   document.getElementById('scroller').scrollTop=0;
   if(t==='add'){
     const today=new Date().toISOString().split('T')[0];
