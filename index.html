@@ -592,8 +592,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     <button class="modal-close" onclick="closeModal('bin')">Back</button>
   </div>
   <div class="modal-inner">
-  <div id="bin-list" style="padding:12px 16px;"></div>
-  <div class="pb"></div>
+    <div id="bin-list" style="padding:12px 16px;"></div>
+    <div class="pb"></div>
+  </div>
 </div>
 <div class="modal" id="modal-edit">
   <div class="modal-handle"></div>
@@ -700,10 +701,10 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     </div>
     <div class="shdr" style="padding-top:8px">Category</div>
     <div class="cat-scroll" id="modal-cat-scroll"></div>
-    <br>
     <button class="save-btn" onclick="saveEdit()">Save Changes</button>
     <button class="del-btn" onclick="confirmDelete()">Delete Receipt</button>
     <div class="pb"></div>
+  </div>
   </div>
 </div>
 
@@ -810,9 +811,9 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;">2024–25 IRD Tier 1 rates (first 14,000 km): Petrol $1.17 · Diesel $1.26 · Hybrid $0.86 · Electric $1.08. Tier 2 (beyond 14,000 km): Petrol $0.37 · Diesel $0.35 · Hybrid $0.21 · Electric $0.19.</div>
-    <br>
     <button class="save-btn" onclick="saveSettings()">Save Settings</button>
     <div class="pb"></div>
+  </div>
   </div>
 </div>
 
@@ -825,8 +826,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
     <div class="modal-title" id="mile-modal-title">Add Trip</div>
     <button class="modal-close" onclick="closeModal('mile')">Back</button>
   </div>
-  <div class="modal-inner">
-  <div style="padding:0 0 8px;">
+  <div style="padding:0 0 8px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;">
     <div class="g-list">
       <div class="g-row">
         <div class="g-icon" style="background:rgba(255,149,0,.1)">📅</div>
@@ -872,7 +872,6 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
         <textarea class="g-textarea" id="m-purpose" placeholder="Why this trip was for business..."></textarea>
       </div>
     </div>
-    <br>
     <div class="gst-note-box" style="margin:0 16px 12px;">💡 <strong>Starting a trip?</strong> Enter the date, from, and odo start — then save. When you return, tap the trip and add the odo finish to complete it.</div>
     <button class="save-btn" onclick="saveMileage()">Save Trip</button>
     <button class="del-btn" id="mile-del-btn" style="display:none" onclick="deleteMileage()">Delete Trip</button>
@@ -910,7 +909,7 @@ const CATS=[
   {id:'other',       label:'Other',           icon:'📁',color:'#8E8E93',entertainment:false},
 ];
 
-let receipts=[], mileage=[], selCat='other', editCat='other';
+let receipts=[], mileage=[], bin=[], selCat='other', editCat='other';
 let imgData=null, editImgData=null, editId=null, editMileId=null;
 let stream=null, facing='environment', camTarget='add';
 let curFilter='all', selPeriodIdx=0;
@@ -1922,6 +1921,7 @@ function renderMileage(){
 }
 
 function openMileModal(id){
+  try{
   editMileId=id;
   if(id){
     const m=mileage.find(x=>x.id===id);if(!m)return;
@@ -1944,6 +1944,7 @@ function openMileModal(id){
   }
   document.getElementById('mile-bg').classList.add('open');
   setTimeout(()=>document.getElementById('modal-mile').classList.add('open'),10);
+  }catch(e){showToast('Error: '+e.message);console.error('openMileModal error:',e);}
 }
 function calcOdoKm(){
   const s=parseFloat(document.getElementById('m-odo-start').value);
@@ -1989,8 +1990,12 @@ function saveMileage(){
 }
 function deleteMileage(){
   if(!confirm('Delete this trip?'))return;
-  mileage=mileage.filter(m=>m.id!==editMileId);
+  const id=editMileId;
+  mileage=mileage.filter(m=>m.id!==id);
+  const {url,secret}=getSyncConfig();
+  if(url&&secret&&id) fetch(url+'/mileage/'+id,{method:'DELETE',headers:{'x-api-secret':secret}}).catch(()=>{});
   save();closeModal('mile');renderMileage();
+  showToast('Trip deleted');
 }
 
 /* ── GST PANEL ── */
