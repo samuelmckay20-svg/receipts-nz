@@ -281,6 +281,20 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 /* Blinking cursor shown on amount display when input is focused */
 .amount-cursor::before { content:'|'; animation:blink .85s step-end infinite; color:var(--blue); margin-right:1px; font-weight:300; }
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── LOGIN SCREEN ── */
+.login-screen { position:fixed; inset:0; z-index:99999; background:var(--bg); display:none; flex-direction:column; align-items:center; justify-content:center; padding:40px 32px; }
+.login-screen.show { display:flex; }
+.login-logo { font-size:56px; margin-bottom:12px; }
+.login-title { font-size:28px; font-weight:700; letter-spacing:-0.8px; margin-bottom:6px; }
+.login-sub { font-size:14px; color:var(--text3); margin-bottom:40px; text-align:center; }
+.login-form { width:100%; max-width:340px; }
+.login-field { width:100%; padding:14px 16px; border:1.5px solid var(--sep-l); border-radius:14px; background:var(--surface); font-family:inherit; font-size:16px; color:var(--text1); outline:none; box-sizing:border-box; margin-bottom:12px; -webkit-appearance:none; }
+.login-field:focus { border-color:var(--blue); }
+.login-btn { width:100%; padding:15px; border-radius:14px; border:none; background:var(--blue); color:white; font-family:inherit; font-size:17px; font-weight:600; cursor:pointer; margin-top:4px; }
+.login-btn:active { opacity:.85; }
+.login-error { color:var(--red); font-size:14px; text-align:center; margin-top:12px; min-height:20px; }
+.login-version { position:absolute; bottom:40px; font-size:12px; color:var(--text4); }
 </style>
 </head>
 <body>
@@ -716,6 +730,19 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
   </div>
   <div class="modal-inner">
   <div style="padding:0 0 8px;">
+    <div class="shdr">Account</div>
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">👤</div>
+        <span class="g-lbl">Signed in as</span>
+        <span class="g-val" id="settings-username" style="color:var(--blue);font-weight:600;"></span>
+      </div>
+    </div>
+    <div style="margin:0 16px 8px;display:flex;gap:8px;">
+      <button onclick="doLogout()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;">Sign Out</button>
+      <button id="admin-btn" onclick="adminCreateUser()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;display:none;">+ Add User</button>
+    </div>
+
     <div class="shdr">AI receipt scanner</div>
     <div class="g-list">
       <div class="g-row">
@@ -924,8 +951,21 @@ settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehi
 function getSyncConfig(){
   return{
     url: localStorage.getItem('nzrt_sync_url')||'',
-    secret: localStorage.getItem('nzrt_sync_secret')||''
+    secret: localStorage.getItem('nzrt_sync_secret')||'',
+    token: localStorage.getItem('nzrt_token')||''
   };
+}
+function getAuthHeaders(){
+  const {secret,token}=getSyncConfig();
+  const h={'Content-Type':'application/json','x-api-secret':secret};
+  if(token) h['Authorization']='Bearer '+token;
+  return h;
+}
+function isLoggedIn(){
+  return !!(getSyncConfig().token && getSyncConfig().url && getSyncConfig().secret);
+}
+function getCurrentUser(){
+  return localStorage.getItem('nzrt_username')||'';
 }
 
 function setSyncStatus(msg, ok){
@@ -939,7 +979,7 @@ async function syncToServer(){
   try{
     const res=await fetch(url+'/sync',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-secret':secret},
+      headers:getAuthHeaders(),
       body:JSON.stringify({receipts, mileage:mileage, settings, bin})
     });
     if(res.ok){
@@ -958,7 +998,7 @@ async function loadFromServer(){
   if(!url||!secret) return false;
   try{
     setSyncStatus('Loading from Synology...', true);
-    const res=await fetch(url+'/data',{headers:{'x-api-secret':secret}});
+    const res=await fetch(url+'/data',{headers:getAuthHeaders()});
     if(!res.ok) return false;
     const data=await res.json();
     if(data.receipts) receipts=data.receipts;
@@ -975,10 +1015,10 @@ async function loadFromServer(){
   }
 }
 
-// Auto-load from server on startup if configured
+// Auto-load from server on startup if logged in
 (async()=>{
-  const {url,secret}=getSyncConfig();
-  if(url&&secret) await loadFromServer();
+  if(isLoggedIn()) await loadFromServer();
+  else showLoginScreen();
 })();
 
 function save(){
@@ -1201,6 +1241,14 @@ function goTab(t){
 
 /* ── SETTINGS ── */
 function openSettings(){
+  // Account section
+  const username=getCurrentUser();
+  const role=localStorage.getItem('nzrt_role')||'user';
+  const usernameEl=document.getElementById('settings-username');
+  if(usernameEl) usernameEl.textContent=username||'Not signed in';
+  const adminBtn=document.getElementById('admin-btn');
+  if(adminBtn) adminBtn.style.display=role==='admin'?'block':'none';
+
   document.getElementById('s-apikey').value=getApiKey();
   const sc=getSyncConfig();
   document.getElementById('s-sync-url').value=sc.url;
@@ -1776,7 +1824,7 @@ function moveReceiptToBin(id){
   bin.unshift({...r, deletedAt:new Date().toISOString()});
   receipts=receipts.filter(x=>x.id!==id);
   const {url,secret}=getSyncConfig();
-  if(url&&secret) fetch(url+'/receipts/'+id,{method:'DELETE',headers:{'x-api-secret':secret}}).catch(()=>{});
+  if(url&&secret) fetch(url+'/receipts/'+id,{method:'DELETE',headers:getAuthHeaders()}).catch(()=>{});
   save();updateStats();renderList();
   showToast('Moved to bin');
 }
@@ -1794,7 +1842,7 @@ function deleteMileageById(id){
   if(!confirm('Delete this trip permanently?')) return;
   mileage=mileage.filter(m=>m.id!==id);
   const {url,secret}=getSyncConfig();
-  if(url&&secret) fetch(url+'/mileage/'+id,{method:'DELETE',headers:{'x-api-secret':secret}}).catch(()=>{});
+  if(url&&secret) fetch(url+'/mileage/'+id,{method:'DELETE',headers:getAuthHeaders()}).catch(()=>{});
   save();renderMileage();
   showToast('Trip deleted');
 }
@@ -1990,7 +2038,7 @@ function deleteMileage(){
   const id=editMileId;
   mileage=mileage.filter(m=>m.id!==id);
   const {url,secret}=getSyncConfig();
-  if(url&&secret&&id) fetch(url+'/mileage/'+id,{method:'DELETE',headers:{'x-api-secret':secret}}).catch(()=>{});
+  if(url&&secret&&id) fetch(url+'/mileage/'+id,{method:'DELETE',headers:getAuthHeaders()}).catch(()=>{});
   save();closeModal('mile');renderMileage();
   showToast('Trip deleted');
 }
@@ -2592,6 +2640,105 @@ async function exportPDF(){
   btn.disabled=false;btn.innerHTML='📄 PDF';
 }
 
+
+/* ── AUTH ── */
+function showLoginScreen(){
+  document.getElementById('login-screen').classList.add('show');
+}
+function hideLoginScreen(){
+  document.getElementById('login-screen').classList.remove('show');
+}
+
+async function doLogin(){
+  const username=document.getElementById('login-username').value.trim();
+  const password=document.getElementById('login-password').value;
+  const errEl=document.getElementById('login-error');
+  const btn=document.querySelector('.login-btn');
+  if(!username||!password){errEl.textContent='Please enter username and password';return;}
+  const {url,secret}=getSyncConfig();
+  if(!url||!secret){
+    errEl.textContent='Please set your server URL and secret first';
+    // Show a mini settings prompt
+    const serverUrl=prompt('Enter your Synology server URL (e.g. https://samuelreceipts.synology.me/api)');
+    const serverSecret=prompt('Enter your API secret key');
+    if(serverUrl) localStorage.setItem('nzrt_sync_url',serverUrl);
+    if(serverSecret) localStorage.setItem('nzrt_sync_secret',serverSecret);
+    return;
+  }
+  btn.textContent='Signing in...';btn.disabled=true;
+  errEl.textContent='';
+  try{
+    const res=await fetch(url+'/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-secret':secret},
+      body:JSON.stringify({username,password})
+    });
+    const data=await res.json();
+    if(!res.ok){errEl.textContent=data.error||'Login failed';btn.textContent='Sign In';btn.disabled=false;return;}
+    localStorage.setItem('nzrt_token',data.token);
+    localStorage.setItem('nzrt_username',data.username);
+    localStorage.setItem('nzrt_role',data.role);
+    hideLoginScreen();
+    await loadFromServer();
+    updateStats();renderList();
+    showToast('Welcome, '+data.username+' ✓');
+  }catch(e){
+    errEl.textContent='Could not reach server. Check your connection.';
+  }
+  btn.textContent='Sign In';btn.disabled=false;
+}
+
+// Allow pressing Enter to login
+document.addEventListener('DOMContentLoaded',()=>{
+  ['login-username','login-password'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  });
+});
+
+function doLogout(){
+  if(!confirm('Sign out?')) return;
+  localStorage.removeItem('nzrt_token');
+  localStorage.removeItem('nzrt_username');
+  localStorage.removeItem('nzrt_role');
+  receipts=[];mileage=[];bin=[];
+  updateStats();renderList();
+  closeModal('settings');
+  showLoginScreen();
+}
+
+/* ── ADMIN: CREATE USER ── */
+async function adminCreateUser(){
+  const username=prompt('New username:');
+  if(!username) return;
+  const password=prompt('Password for '+username+':');
+  if(!password) return;
+  const role=confirm('Make this user an admin?')?'admin':'user';
+  const {url}=getSyncConfig();
+  try{
+    const res=await fetch(url+'/auth/create',{
+      method:'POST',
+      headers:getAuthHeaders(),
+      body:JSON.stringify({username,password,role})
+    });
+    const data=await res.json();
+    if(res.ok) showToast('User '+username+' created ✓');
+    else showToast('Error: '+data.error);
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function adminListUsers(){
+  const {url}=getSyncConfig();
+  try{
+    const res=await fetch(url+'/auth/users',{headers:getAuthHeaders()});
+    const data=await res.json();
+    if(!res.ok){showToast('Error: '+data.error);return;}
+    const list=data.users.map(u=>u.username+(u.role==='admin'?' (admin)':'')).join('\n');
+    alert('Users:\n'+list);
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+
 /* ── INIT ── */
 updateStats();
 renderList();
@@ -2600,5 +2747,19 @@ document.documentElement.scrollTop = 0;
 document.body.scrollTop = 0;
 
 </script>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="login-screen">
+  <div class="login-logo">🧾</div>
+  <div class="login-title">Receipts NZ</div>
+  <div class="login-sub">Sign in to your account</div>
+  <div class="login-form">
+    <input class="login-field" type="text" id="login-username" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <input class="login-field" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+  <div class="login-version">Receipts NZ</div>
+</div>
 </body>
 </html>
