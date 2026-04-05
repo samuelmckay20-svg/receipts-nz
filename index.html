@@ -705,6 +705,21 @@ html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-ap
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;">Get a free key at console.anthropic.com — costs ~$0.003 per receipt scan (~$0.30 for 100 receipts/month).</div>
+
+    <div class="shdr">Synology backup</div>
+    <div class="g-list">
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">🖥️</div>
+        <span class="g-lbl">Server URL</span>
+        <input class="g-input g-input-sm" type="url" id="s-sync-url" placeholder="https://x.synology.me/api" style="font-size:12px;">
+      </div>
+      <div class="g-row">
+        <div class="g-icon" style="background:rgba(0,122,255,.1)">🔐</div>
+        <span class="g-lbl">Secret key</span>
+        <input class="g-input g-input-sm" type="password" id="s-sync-secret" placeholder="your-api-secret" style="font-family:monospace;font-size:12px;">
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 12px;" id="sync-status">Not configured — enter your Synology URL and secret to enable automatic backup.</div>
     <div class="shdr">Your business</div>
     <div class="g-list">
       <div class="g-row">
@@ -883,12 +898,75 @@ function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):
 receipts=load('nzrt5_r',[]);
 mileage=load('nzrt5_m',[]);
 settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37},load('nzrt5_s',{}));
+
+/* ── SYNOLOGY SYNC ── */
+function getSyncConfig(){
+  return{
+    url: localStorage.getItem('nzrt_sync_url')||'',
+    secret: localStorage.getItem('nzrt_sync_secret')||''
+  };
+}
+
+function setSyncStatus(msg, ok){
+  const el=document.getElementById('sync-status');
+  if(el){el.textContent=msg;el.style.color=ok?'var(--accent-dark)':'var(--orange)';}
+}
+
+async function syncToServer(){
+  const {url, secret}=getSyncConfig();
+  if(!url||!secret) return;
+  try{
+    const res=await fetch(url+'/sync',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-secret':secret},
+      body:JSON.stringify({receipts, mileage:mileage, settings})
+    });
+    if(res.ok){
+      setSyncStatus('✓ Synced to Synology '+new Date().toLocaleTimeString('en-NZ'),true);
+      localStorage.setItem('nzrt_last_sync', new Date().toISOString());
+    } else {
+      setSyncStatus('Sync failed: '+res.status, false);
+    }
+  }catch(e){
+    setSyncStatus('Sync error: '+e.message, false);
+  }
+}
+
+async function loadFromServer(){
+  const {url, secret}=getSyncConfig();
+  if(!url||!secret) return false;
+  try{
+    setSyncStatus('Loading from Synology...', true);
+    const res=await fetch(url+'/data',{headers:{'x-api-secret':secret}});
+    if(!res.ok) return false;
+    const data=await res.json();
+    if(data.receipts) receipts=data.receipts;
+    if(data.mileage) mileage=data.mileage;
+    if(data.settings) settings=Object.assign(settings,data.settings);
+    save(); // persist to localStorage as cache
+    updateStats();
+    setSyncStatus('✓ Loaded from Synology', true);
+    return true;
+  }catch(e){
+    setSyncStatus('Could not reach Synology — using local data', false);
+    return false;
+  }
+}
+
+// Auto-load from server on startup if configured
+(async()=>{
+  const {url,secret}=getSyncConfig();
+  if(url&&secret) await loadFromServer();
+})();
+
 function save(){
   try{
     localStorage.setItem('nzrt5_r',JSON.stringify(receipts));
     localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
     localStorage.setItem('nzrt5_s',JSON.stringify(settings));
   }catch(e){}
+  // Sync to Synology in background — don't await so UI stays fast
+  syncToServer();
 }
 
 /* ── FY ── */
@@ -1082,6 +1160,9 @@ function goTab(t){
 /* ── SETTINGS ── */
 function openSettings(){
   document.getElementById('s-apikey').value=getApiKey();
+  const sc=getSyncConfig();
+  document.getElementById('s-sync-url').value=sc.url;
+  document.getElementById('s-sync-secret').value=sc.secret;
   document.getElementById('s-bizname').value=settings.bizname;
   document.getElementById('s-gstn').value=formatGSTNum(settings.gstn||'');
   document.getElementById('s-gstperiod').value=settings.gstperiod;
@@ -1112,6 +1193,10 @@ function saveSettings(){
   settings.milerate2=parseFloat(document.getElementById('s-milerate2').value)||0.37;
   const apiKey=document.getElementById('s-apikey').value.trim();
   if(apiKey)localStorage.setItem('nzrt_apikey',apiKey);
+  const syncUrl=document.getElementById('s-sync-url').value.trim();
+  const syncSecret=document.getElementById('s-sync-secret').value.trim();
+  if(syncUrl)localStorage.setItem('nzrt_sync_url',syncUrl);
+  if(syncSecret)localStorage.setItem('nzrt_sync_secret',syncSecret);
   save();closeModal('settings');showToast('Settings saved');
   updateStats();
 }
