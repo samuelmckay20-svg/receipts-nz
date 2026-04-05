@@ -37,9 +37,10 @@
     --warn-bg: rgba(255,149,0,0.15); --warn-text: #FFB340;
   }
 }
-html, body { height:100%; overflow:hidden; background:var(--bg); font-family:-apple-system,'SF Pro Text',system-ui,sans-serif; color:var(--text1); -webkit-font-smoothing:antialiased; }
+html { height: 100%; }
+body { height: 100%; height: 100dvh; overflow:hidden; background:var(--bg); font-family:-apple-system,'SF Pro Text',system-ui,sans-serif; color:var(--text1); -webkit-font-smoothing:antialiased; }
 /* Desktop/iPad: constrain to a centred column */
-.shell { display:flex; flex-direction:column; height:100%; height:-webkit-fill-available; max-width:600px; margin:0 auto; position:relative; }
+.shell { display:flex; flex-direction:column; width:100%; height:100%; max-width:600px; margin:0 auto; position:fixed; top:0; left:0; right:0; bottom:0; }
 @media (min-width:600px){
   html,body { background:#e5e5ea; }
   .shell { box-shadow:0 0 40px rgba(0,0,0,.15); }
