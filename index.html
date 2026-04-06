@@ -742,6 +742,10 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       <button id="signout-btn" onclick="isLoggedIn()?doLogout():showLoginScreen()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;">Sign Out</button>
       <button id="admin-btn" onclick="adminCreateUser()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;display:none;">+ Add User</button>
     </div>
+    <div style="margin:0 16px 16px;display:flex;gap:8px;">
+      <button onclick="showChangePassword()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(0,122,255,.1);color:var(--blue);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;">🔑 Change Password</button>
+      <button id="manage-users-btn" onclick="showManageUsers()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(88,86,214,.1);color:#5856D6;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;display:none;">👥 Manage Users</button>
+    </div>
 
     <!-- Admin-only settings -->
     <div id="admin-settings" style="display:none;">
@@ -1279,6 +1283,8 @@ function openSettings(){
   if(adminSettingsEl) adminSettingsEl.style.display=(loggedIn&&role==='admin')?'block':'none';
   const adminBtn=document.getElementById('admin-btn');
   if(adminBtn) adminBtn.style.display=(loggedIn&&role==='admin')?'block':'none';
+  const manageUsersBtn=document.getElementById('manage-users-btn');
+  if(manageUsersBtn) manageUsersBtn.style.display=(loggedIn&&role==='admin')?'block':'none';
 
   if(loggedIn&&role==='admin'){
     const apikeyEl=document.getElementById('s-apikey');
@@ -2769,6 +2775,102 @@ async function adminListUsers(){
 }
 
 
+/* ── CHANGE PASSWORD ── */
+function showChangePassword(){
+  if(!isLoggedIn()){showToast('Please sign in first');return;}
+  document.getElementById('chpw-current').value='';
+  document.getElementById('chpw-new').value='';
+  document.getElementById('chpw-confirm').value='';
+  document.getElementById('chpw-error').textContent='';
+  closeModal('settings');
+  setTimeout(()=>{
+    document.getElementById('chpw-bg').classList.add('open');
+    document.getElementById('modal-chpw').classList.add('open');
+  },300);
+}
+
+async function doChangePassword(){
+  const current=document.getElementById('chpw-current').value;
+  const newPw=document.getElementById('chpw-new').value;
+  const confirm=document.getElementById('chpw-confirm').value;
+  const errEl=document.getElementById('chpw-error');
+  errEl.textContent='';
+  if(!current||!newPw||!confirm){errEl.textContent='Please fill in all fields';return;}
+  if(newPw.length<8){errEl.textContent='New password must be at least 8 characters';return;}
+  if(newPw!==confirm){errEl.textContent='New passwords do not match';return;}
+  const {url,secret}=getSyncConfig();
+  const username=getCurrentUser();
+  const btn=document.querySelector('#modal-chpw .chpw-save-btn');
+  btn.textContent='Updating...';btn.disabled=true;
+  try{
+    const res=await fetch(url+'/auth/change-password',{
+      method:'POST',
+      headers:{...getAuthHeaders(),'Content-Type':'application/json'},
+      body:JSON.stringify({currentPassword:current,newPassword:newPw})
+    });
+    const data=await res.json();
+    if(res.ok){showToast('Password updated ✓');closeModal('chpw');}
+    else{errEl.textContent=data.error||'Failed to update password';}
+  }catch(e){errEl.textContent='Could not reach server';}
+  btn.textContent='Update Password';btn.disabled=false;
+}
+
+/* ── MANAGE USERS ── */
+async function showManageUsers(){
+  closeModal('settings');
+  setTimeout(async()=>{
+    document.getElementById('mgr-bg').classList.add('open');
+    document.getElementById('modal-mgr').classList.add('open');
+    await refreshUserList();
+  },300);
+}
+
+async function refreshUserList(){
+  const {url}=getSyncConfig();
+  const listEl=document.getElementById('mgr-user-list');
+  listEl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;">Loading...</div>';
+  try{
+    const res=await fetch(url+'/auth/users',{headers:getAuthHeaders()});
+    const data=await res.json();
+    if(!res.ok){listEl.innerHTML='<div style="color:var(--red);padding:16px;">'+(data.error||'Failed to load users')+'</div>';return;}
+    const currentUser=getCurrentUser();
+    listEl.innerHTML=data.users.map(u=>`
+      <div style="background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
+        <div style="width:40px;height:40px;border-radius:50%;background:${u.role==='admin'?'rgba(255,149,0,.15)':'rgba(0,122,255,.1)'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${u.role==='admin'?'👑':'👤'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:15px;">${u.username}${u.username===currentUser?' <span style="color:var(--blue);font-size:12px;">(you)</span>':''}</div>
+          <div style="font-size:12px;color:var(--text3);">${u.role==='admin'?'Administrator':'User'} · Joined ${new Date(u.created_at).toLocaleDateString('en-NZ')}</div>
+        </div>
+        ${u.username!==currentUser?`<div style="display:flex;gap:6px;">
+          <button onclick="adminResetPassword(${u.id},'${u.username}')" style="padding:6px 10px;border-radius:8px;border:none;background:rgba(0,122,255,.1);color:var(--blue);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">Reset PW</button>
+          <button onclick="adminDeleteUser(${u.id},'${u.username}')" style="padding:6px 10px;border-radius:8px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
+        </div>`:''}
+      </div>`).join('');
+  }catch(e){listEl.innerHTML='<div style="color:var(--red);padding:16px;">Could not reach server</div>';}
+}
+
+async function adminResetPassword(userId,username){
+  const newPw=prompt('New password for '+username+' (min 8 characters):');
+  if(!newPw) return;
+  if(newPw.length<8){showToast('Password must be at least 8 characters');return;}
+  const {url}=getSyncConfig();
+  try{
+    const res=await fetch(url+'/auth/users/'+userId+'/password',{method:'POST',headers:{...getAuthHeaders(),'Content-Type':'application/json'},body:JSON.stringify({password:newPw})});
+    if(res.ok) showToast('Password reset for '+username+' ✓');
+    else{const d=await res.json();showToast('Error: '+(d.error||'Failed'));}
+  }catch(e){showToast('Could not reach server');}
+}
+
+async function adminDeleteUser(userId,username){
+  if(!confirm('Delete user "'+username+'"?\n\nThis will permanently delete all their receipts, mileage and data. This cannot be undone.')) return;
+  const {url}=getSyncConfig();
+  try{
+    const res=await fetch(url+'/auth/users/'+userId,{method:'DELETE',headers:getAuthHeaders()});
+    if(res.ok){showToast(username+' deleted ✓');await refreshUserList();}
+    else{const d=await res.json();showToast('Error: '+(d.error||'Failed'));}
+  }catch(e){showToast('Could not reach server');}
+}
+
 /* ── INIT ── */
 updateStats();
 renderList();
@@ -2778,7 +2880,34 @@ document.body.scrollTop = 0;
 
 </script>
 
-<!-- LOGIN SCREEN -->
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-bg" id="chpw-bg" onclick="closeModal('chpw')"></div>
+<div class="modal" id="modal-chpw">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr"><span></span><span class="modal-title">Change Password</span><button class="modal-back" onclick="closeModal('chpw')">Done</button></div>
+  <div class="modal-inner">
+    <div class="g-list" style="margin-bottom:12px;">
+      <div class="g-row"><div class="g-icon" style="background:rgba(0,122,255,.1)">🔒</div><span class="g-lbl">Current password</span><input class="g-input g-input-sm" type="password" id="chpw-current" placeholder="Current password" autocomplete="current-password"></div>
+      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">🔑</div><span class="g-lbl">New password</span><input class="g-input g-input-sm" type="password" id="chpw-new" placeholder="New password" autocomplete="new-password"></div>
+      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">✅</div><span class="g-lbl">Confirm new</span><input class="g-input g-input-sm" type="password" id="chpw-confirm" placeholder="Confirm new password" autocomplete="new-password"></div>
+    </div>
+    <div id="chpw-error" style="color:var(--red);font-size:13px;text-align:center;margin-bottom:8px;min-height:18px;"></div>
+    <button class="chpw-save-btn" onclick="doChangePassword()" style="width:100%;padding:15px;border-radius:14px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;">Update Password</button>
+    <div class="pb"></div>
+  </div>
+</div>
+
+<!-- MANAGE USERS MODAL -->
+<div class="modal-bg" id="mgr-bg" onclick="closeModal('mgr')"></div>
+<div class="modal" id="modal-mgr">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr"><span></span><span class="modal-title">Manage Users</span><button class="modal-back" onclick="closeModal('mgr')">Done</button></div>
+  <div class="modal-inner">
+    <button onclick="adminCreateUser()" style="width:100%;padding:14px;border-radius:14px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:16px;">＋ Add New User</button>
+    <div id="mgr-user-list"></div>
+    <div class="pb"></div>
+  </div>
+</div>
 <div class="login-screen" id="login-screen">
   <div class="login-logo">🧾</div>
   <div class="login-title">Receipts NZ</div>
