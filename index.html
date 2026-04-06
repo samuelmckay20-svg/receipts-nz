@@ -2643,6 +2643,12 @@ async function exportPDF(){
 
 /* ── AUTH ── */
 function showLoginScreen(){
+  // Pre-fill server config if already saved
+  const sc=getSyncConfig();
+  const urlEl=document.getElementById('login-server-url');
+  const secretEl=document.getElementById('login-server-secret');
+  if(urlEl&&sc.url) urlEl.value=sc.url;
+  if(secretEl&&sc.secret) secretEl.value=sc.secret;
   document.getElementById('login-screen').classList.add('show');
 }
 function hideLoginScreen(){
@@ -2654,17 +2660,17 @@ async function doLogin(){
   const password=document.getElementById('login-password').value;
   const errEl=document.getElementById('login-error');
   const btn=document.querySelector('.login-btn');
+
+  // Save server config from login form if provided
+  const loginUrl=document.getElementById('login-server-url').value.trim();
+  const loginSecret=document.getElementById('login-server-secret').value.trim();
+  if(loginUrl) localStorage.setItem('nzrt_sync_url', loginUrl);
+  if(loginSecret) localStorage.setItem('nzrt_sync_secret', loginSecret);
+
   if(!username||!password){errEl.textContent='Please enter username and password';return;}
   const {url,secret}=getSyncConfig();
-  if(!url||!secret){
-    errEl.textContent='Please set your server URL and secret first';
-    // Show a mini settings prompt
-    const serverUrl=prompt('Enter your Synology server URL (e.g. https://samuelreceipts.synology.me/api)');
-    const serverSecret=prompt('Enter your API secret key');
-    if(serverUrl) localStorage.setItem('nzrt_sync_url',serverUrl);
-    if(serverSecret) localStorage.setItem('nzrt_sync_secret',serverSecret);
-    return;
-  }
+  if(!url||!secret){errEl.textContent='Please enter your server URL and API secret above';return;}
+
   btn.textContent='Signing in...';btn.disabled=true;
   errEl.textContent='';
   try{
@@ -2683,7 +2689,7 @@ async function doLogin(){
     updateStats();renderList();
     showToast('Welcome, '+data.username+' ✓');
   }catch(e){
-    errEl.textContent='Could not reach server. Check your connection.';
+    errEl.textContent='Could not reach server. Check your server URL and connection.';
   }
   btn.textContent='Sign In';btn.disabled=false;
 }
@@ -2754,6 +2760,9 @@ document.body.scrollTop = 0;
   <div class="login-title">Receipts NZ</div>
   <div class="login-sub">Sign in to your account</div>
   <div class="login-form">
+    <input class="login-field" type="url" id="login-server-url" placeholder="Server URL (https://x.synology.me/api)" autocomplete="off" autocapitalize="none" spellcheck="false" style="font-size:13px;">
+    <input class="login-field" type="password" id="login-server-secret" placeholder="API Secret" autocomplete="off" style="font-size:13px;">
+    <div style="height:1px;background:var(--sep-l);margin:4px 0 16px;"></div>
     <input class="login-field" type="text" id="login-username" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
     <input class="login-field" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
     <button class="login-btn" onclick="doLogin()">Sign In</button>
