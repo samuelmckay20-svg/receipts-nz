@@ -739,10 +739,12 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
     <div style="margin:0 16px 8px;display:flex;gap:8px;">
-      <button onclick="doLogout()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;">Sign Out</button>
+      <button id="signout-btn" onclick="isLoggedIn()?doLogout():showLoginScreen()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;">Sign Out</button>
       <button id="admin-btn" onclick="adminCreateUser()" style="flex:1;padding:12px;border-radius:12px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;display:none;">+ Add User</button>
     </div>
 
+    <!-- Admin-only settings -->
+    <div id="admin-settings" style="display:none;">
     <div class="shdr">AI receipt scanner</div>
     <div class="g-list">
       <div class="g-row">
@@ -767,6 +769,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;" id="sync-status">Not configured — enter your Synology URL and secret to enable automatic backup.</div>
+    </div><!-- end admin-only -->
     <div class="shdr">Your business</div>
     <div class="g-list">
       <div class="g-row">
@@ -948,10 +951,15 @@ bin=load('nzrt5_bin',[]);
 settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37},load('nzrt5_s',{}));
 
 /* ── SYNOLOGY SYNC ── */
+// ── SERVER CONFIG (pre-configured — users only need username/password) ──
+const DEFAULT_SERVER_URL = 'https://samuelreceipts.synology.me/api';
+const DEFAULT_API_SECRET = '6QwWzWg72ICMnQDiVsWj9mEW4Jv9i6UAbvFsjcBF';
+const DEFAULT_API_KEY = ''; // Admin sets this — stored in localStorage
+
 function getSyncConfig(){
   return{
-    url: localStorage.getItem('nzrt_sync_url')||'',
-    secret: localStorage.getItem('nzrt_sync_secret')||'',
+    url: localStorage.getItem('nzrt_sync_url') || DEFAULT_SERVER_URL,
+    secret: localStorage.getItem('nzrt_sync_secret') || DEFAULT_API_SECRET,
     token: localStorage.getItem('nzrt_token')||''
   };
 }
@@ -1244,15 +1252,29 @@ function openSettings(){
   // Account section
   const username=getCurrentUser();
   const role=localStorage.getItem('nzrt_role')||'user';
+  const loggedIn=isLoggedIn();
   const usernameEl=document.getElementById('settings-username');
-  if(usernameEl) usernameEl.textContent=username||'Not signed in';
+  if(usernameEl) usernameEl.textContent=loggedIn?(username||'Unknown'):'Not signed in';
+  const signoutBtn=document.getElementById('signout-btn');
+  if(signoutBtn){
+    signoutBtn.textContent=loggedIn?'Sign Out':'Sign In';
+    signoutBtn.style.background=loggedIn?'rgba(255,59,48,.1)':'rgba(0,122,255,.1)';
+    signoutBtn.style.color=loggedIn?'var(--red)':'var(--blue)';
+  }
+  const adminSettingsEl=document.getElementById('admin-settings');
+  if(adminSettingsEl) adminSettingsEl.style.display=(loggedIn&&role==='admin')?'block':'none';
   const adminBtn=document.getElementById('admin-btn');
-  if(adminBtn) adminBtn.style.display=role==='admin'?'block':'none';
+  if(adminBtn) adminBtn.style.display=(loggedIn&&role==='admin')?'block':'none';
 
-  document.getElementById('s-apikey').value=getApiKey();
-  const sc=getSyncConfig();
-  document.getElementById('s-sync-url').value=sc.url;
-  document.getElementById('s-sync-secret').value=sc.secret;
+  if(loggedIn&&role==='admin'){
+    const apikeyEl=document.getElementById('s-apikey');
+    if(apikeyEl) apikeyEl.value=getApiKey();
+    const sc=getSyncConfig();
+    const syncUrlEl=document.getElementById('s-sync-url');
+    const syncSecretEl=document.getElementById('s-sync-secret');
+    if(syncUrlEl) syncUrlEl.value=sc.url;
+    if(syncSecretEl) syncSecretEl.value=sc.secret;
+  }
   document.getElementById('s-bizname').value=settings.bizname;
   document.getElementById('s-gstn').value=formatGSTNum(settings.gstn||'');
   document.getElementById('s-gstperiod').value=settings.gstperiod;
@@ -1281,12 +1303,19 @@ function saveSettings(){
   settings.fueltype=document.getElementById('s-fueltype').value;
   settings.milerate=parseFloat(document.getElementById('s-milerate').value)||1.17;
   settings.milerate2=parseFloat(document.getElementById('s-milerate2').value)||0.37;
-  const apiKey=document.getElementById('s-apikey').value.trim();
-  if(apiKey)localStorage.setItem('nzrt_apikey',apiKey);
-  const syncUrl=document.getElementById('s-sync-url').value.trim();
-  const syncSecret=document.getElementById('s-sync-secret').value.trim();
-  if(syncUrl)localStorage.setItem('nzrt_sync_url',syncUrl);
-  if(syncSecret)localStorage.setItem('nzrt_sync_secret',syncSecret);
+  // Admin-only fields
+  const role=localStorage.getItem('nzrt_role')||'user';
+  if(role==='admin'){
+    const apiKeyEl=document.getElementById('s-apikey');
+    const apiKey=apiKeyEl?apiKeyEl.value.trim():'';
+    if(apiKey) localStorage.setItem('nzrt_apikey',apiKey);
+    const syncUrlEl=document.getElementById('s-sync-url');
+    const syncSecretEl=document.getElementById('s-sync-secret');
+    const syncUrl=syncUrlEl?syncUrlEl.value.trim():'';
+    const syncSecret=syncSecretEl?syncSecretEl.value.trim():'';
+    if(syncUrl) localStorage.setItem('nzrt_sync_url',syncUrl);
+    if(syncSecret) localStorage.setItem('nzrt_sync_secret',syncSecret);
+  }
   save();closeModal('settings');showToast('Settings saved');
   updateStats();
 }
@@ -1427,7 +1456,7 @@ function onPDF(e){
     document.getElementById('retake-row').style.display='block';
     document.getElementById('ai-btn-wrap').style.display='block';
     document.getElementById('ai-result').style.display='none';
-    document.getElementById('api-key-setup').style.display=getApiKey()?'none':'block';
+    document.getElementById('api-key-setup').style.display=(getApiKey()||localStorage.getItem('nzrt_role')!=='admin')?'none':'block';
   };
   r.readAsDataURL(f);
 }
@@ -1455,7 +1484,7 @@ function showPreview(){
   document.getElementById('retake-row').style.display='block';
   document.getElementById('ai-btn-wrap').style.display='block';
   document.getElementById('ai-result').style.display='none';
-  document.getElementById('api-key-setup').style.display=getApiKey()?'none':'block';
+  document.getElementById('api-key-setup').style.display=(getApiKey()||localStorage.getItem('nzrt_role')!=='admin')?'none':'block';
 }
 function clearImg(){
   imgData=null;
@@ -1566,7 +1595,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeViewer();});
 })();
 
 /* ── AI ANALYSER ── */
-function getApiKey(){return localStorage.getItem('nzrt_apikey')||'';}
+function getApiKey(){
+  // Use user's own key if set, otherwise use the shared key set by admin
+  return localStorage.getItem('nzrt_apikey')||localStorage.getItem('nzrt_shared_apikey')||'';
+}
 
 function saveApiKey(){
   const k=document.getElementById('api-key-input').value.trim();
@@ -2643,12 +2675,6 @@ async function exportPDF(){
 
 /* ── AUTH ── */
 function showLoginScreen(){
-  // Pre-fill server config if already saved
-  const sc=getSyncConfig();
-  const urlEl=document.getElementById('login-server-url');
-  const secretEl=document.getElementById('login-server-secret');
-  if(urlEl&&sc.url) urlEl.value=sc.url;
-  if(secretEl&&sc.secret) secretEl.value=sc.secret;
   document.getElementById('login-screen').classList.add('show');
 }
 function hideLoginScreen(){
@@ -2660,17 +2686,8 @@ async function doLogin(){
   const password=document.getElementById('login-password').value;
   const errEl=document.getElementById('login-error');
   const btn=document.querySelector('.login-btn');
-
-  // Save server config from login form if provided
-  const loginUrl=document.getElementById('login-server-url').value.trim();
-  const loginSecret=document.getElementById('login-server-secret').value.trim();
-  if(loginUrl) localStorage.setItem('nzrt_sync_url', loginUrl);
-  if(loginSecret) localStorage.setItem('nzrt_sync_secret', loginSecret);
-
-  if(!username||!password){errEl.textContent='Please enter username and password';return;}
+  if(!username||!password){errEl.textContent='Please enter your username and password';return;}
   const {url,secret}=getSyncConfig();
-  if(!url||!secret){errEl.textContent='Please enter your server URL and API secret above';return;}
-
   btn.textContent='Signing in...';btn.disabled=true;
   errEl.textContent='';
   try{
@@ -2689,7 +2706,7 @@ async function doLogin(){
     updateStats();renderList();
     showToast('Welcome, '+data.username+' ✓');
   }catch(e){
-    errEl.textContent='Could not reach server. Check your server URL and connection.';
+    errEl.textContent='Could not reach server. Check your connection.';
   }
   btn.textContent='Sign In';btn.disabled=false;
 }
@@ -2760,9 +2777,6 @@ document.body.scrollTop = 0;
   <div class="login-title">Receipts NZ</div>
   <div class="login-sub">Sign in to your account</div>
   <div class="login-form">
-    <input class="login-field" type="url" id="login-server-url" placeholder="Server URL (https://x.synology.me/api)" autocomplete="off" autocapitalize="none" spellcheck="false" style="font-size:13px;">
-    <input class="login-field" type="password" id="login-server-secret" placeholder="API Secret" autocomplete="off" style="font-size:13px;">
-    <div style="height:1px;background:var(--sep-l);margin:4px 0 16px;"></div>
     <input class="login-field" type="text" id="login-username" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
     <input class="login-field" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
     <button class="login-btn" onclick="doLogin()">Sign In</button>
