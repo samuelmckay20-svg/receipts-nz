@@ -993,6 +993,12 @@ async function syncToServer(){
     if(res.ok){
       setSyncStatus('✓ Synced to Synology '+new Date().toLocaleTimeString('en-NZ'),true);
       localStorage.setItem('nzrt_last_sync', new Date().toISOString());
+    } else if(res.status===401){
+      setSyncStatus('Session expired — please sign in again', false);
+      localStorage.removeItem('nzrt_token');
+      localStorage.removeItem('nzrt_username');
+      localStorage.removeItem('nzrt_role');
+      showLoginScreen();
     } else {
       setSyncStatus('Sync failed: '+res.status, false);
     }
@@ -1007,6 +1013,14 @@ async function loadFromServer(){
   try{
     setSyncStatus('Loading from Synology...', true);
     const res=await fetch(url+'/data',{headers:getAuthHeaders()});
+    if(res.status===401){
+      // Token expired or invalid - force re-login
+      localStorage.removeItem('nzrt_token');
+      localStorage.removeItem('nzrt_username');
+      localStorage.removeItem('nzrt_role');
+      showLoginScreen();
+      return false;
+    }
     if(!res.ok) return false;
     const data=await res.json();
     if(data.receipts) receipts=data.receipts;
@@ -1699,14 +1713,7 @@ Rules:
 
     // Try direct first, fall back to CORS proxy if blocked (iOS Safari)
     let res;
-    try{
-      res=await fetch(ANTHROPIC_URL,{method:'POST',headers:reqHeaders,body:reqBody});
-    }catch(directErr){
-      // Direct fetch blocked (iOS Safari CORS) — try via proxy
-      btn.innerHTML='<span class="spinner"></span> Retrying...';
-      const proxyURL='https://corsproxy.io/?'+encodeURIComponent(ANTHROPIC_URL);
-      res=await fetch(proxyURL,{method:'POST',headers:reqHeaders,body:reqBody});
-    }
+    res=await fetch(ANTHROPIC_URL,{method:'POST',headers:reqHeaders,body:reqBody});
     const data=await res.json();
     if(data.error)throw new Error(data.error.message||JSON.stringify(data.error));
     const text=data.content.map(b=>b.text||'').join('').trim();
