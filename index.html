@@ -322,6 +322,10 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
     <!-- ADD PANEL -->
     <div id="p-add" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0;">
+        <span style="font-size:17px;font-weight:700;letter-spacing:-0.4px;">New Receipt</span>
+        <button onclick="clearImg();goTab('list')" style="padding:6px 14px;border-radius:20px;border:none;background:var(--fill2);color:var(--text2);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;">✕ Cancel</button>
+      </div>
       <div class="capture-card" style="margin-top:14px;">
         <div class="photo-prev-wrap" id="prev-wrap" style="display:none">
           <img id="prev-img" class="photo-prev" alt="Receipt" onclick="viewImg(null,'Receipt preview')">
@@ -468,17 +472,16 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
     <div id="p-list">
       <div class="filt-row" id="filt-row"></div>
       <div class="exp-row">
-        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Export:</span>
-        <button class="exp-btn grn" id="btn-zip" onclick="exportZip()">📦 ZIP</button>
-        <button class="exp-btn" id="btn-pdf" onclick="exportPDF()">📄 PDF</button>
-        <button class="exp-btn" id="btn-csv" onclick="exportCSV()">⬇ CSV</button>
+        <button class="exp-btn" onclick="openExportSheet()" style="background:rgba(0,122,255,.1);color:var(--blue);">⬆ Export</button>
         <button class="exp-btn" onclick="openBin()" style="background:rgba(255,59,48,.1);color:var(--red);">🗑 Bin</button>
+        <div style="flex:1;"></div>
+        <button onclick="goTab('add')" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">＋ Receipt</button>
       </div>
       <div id="r-list"></div>
       <div class="empty" id="r-empty" style="display:none">
         <div class="empty-ico">🧾</div>
         <div class="empty-title">No receipts yet</div>
-        <div class="empty-sub">Tap Add to photograph or upload your first receipt.</div>
+        <div class="empty-sub">Tap + Receipt to photograph or upload your first receipt.</div>
       </div>
       <div class="pb"></div>
     </div>
@@ -567,7 +570,6 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
   </div><!-- scroller -->
 
   <nav class="tabbar">
-    <button class="tab" id="t-add" onclick="goTab('add')"><span class="tab-ico">＋</span><span class="tab-lbl">Add</span></button>
     <button class="tab on" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
     <button class="tab" id="t-mile" onclick="goTab('mile')"><span class="tab-ico">🚗</span><span class="tab-lbl">Mileage</span></button>
     <button class="tab" id="t-gst" onclick="goTab('gst')"><span class="tab-ico">📊</span><span class="tab-lbl">GST</span></button>
@@ -1249,8 +1251,10 @@ function updateEntWarn(warnId,catId){
 /* ── TABS ── */
 function goTab(t){
   ['add','list','mile','gst'].forEach(n=>{
-    document.getElementById('p-'+n).style.display=n===t?'block':'none';
-    document.getElementById('t-'+n).classList.toggle('on',n===t);
+    const panel=document.getElementById('p-'+n);
+    const tabBtn=document.getElementById('t-'+n);
+    if(panel) panel.style.display=n===t?'block':'none';
+    if(tabBtn) tabBtn.classList.toggle('on',n===t);
   });
   // Summary cards only on receipts tab
   document.getElementById('sum-row').style.display=t==='list'?'grid':'none';
@@ -1835,6 +1839,14 @@ function startLongPress(id,type){
   },550);
 }
 function cancelLongPress(){clearTimeout(_lpTimer);_lpTimer=null;}
+
+function openExportSheet(){
+  showActionSheet('Export receipts', [
+    {label:'📦 ZIP — images + spreadsheet', action:'exportZip()'},
+    {label:'📄 PDF — formatted report', action:'exportPDF()'},
+    {label:'⬇ CSV — spreadsheet only', action:'exportCSV()'},
+  ]);
+}
 
 function showActionSheet(title, actions){
   // Remove any existing sheet
@@ -2436,14 +2448,29 @@ async function exportPeriodPDF(){
       const fields=[['Date',fmtDate(r.date)],['Category',c.label],['Claimable','$'+claimable.toFixed(2)],['GST','$'+gst.toFixed(2)],['Invoice #',r.invoice||'—'],['Supplier GST#',r.suppgst||'—']];
       for(let fi=0;fi<fields.length;fi+=2){
         if(cy>278){doc.addPage();cy=mg;}
+        // Calculate row height based on longest wrapped value
+        let rowH=10;
+        fields.slice(fi,fi+2).forEach(([lbl,val])=>{
+          const lines=doc.splitTextToSize(String(val),hw-4);
+          rowH=Math.max(rowH,Math.max(8,lines.length*4+6)+2);
+        });
         fields.slice(fi,fi+2).forEach(([lbl,val],col)=>{
           const fx=mg+col*(hw+6);
-          fr(fx,cy-3,hw,8,col===0?[248,248,246]:[244,244,242]);
+          const lines=doc.splitTextToSize(String(val),hw-4);
+          const boxH=Math.max(8,lines.length*4+6);
+          fr(fx,cy-3,hw,boxH,col===0?[248,248,246]:[244,244,242]);
           sf(6,'bold',MID);doc.text(lbl.toUpperCase(),fx+2,cy+0);
-          sf(8,'normal',DARK);doc.text(String(val).substring(0,36),fx+2,cy+5);
-        });cy+=10;
+          sf(8,'normal',DARK);doc.text(lines,fx+2,cy+5);
+        });cy+=rowH;
       }
-      if(r.notes){fr(mg,cy-3,cw,8,BG);sf(6,'bold',MID);doc.text('PURPOSE',mg+2,cy);const nl=doc.splitTextToSize(r.notes,cw-4);sf(8,'normal',DARK);doc.text(nl,mg+2,cy+5);cy+=Math.max(10,nl.length*4+7);}
+      if(r.notes){
+        const noteLines=doc.splitTextToSize(r.notes,cw-4);
+        const noteH=Math.max(8,noteLines.length*4+6);
+        fr(mg,cy-3,cw,noteH,BG);
+        sf(6,'bold',MID);doc.text('PURPOSE',mg+2,cy);
+        sf(8,'normal',DARK);doc.text(noteLines,mg+2,cy+5);
+        cy+=noteH+4;
+      }
       cy+=3;hl(cy);cy+=5;
       if(r.image){
         try{
@@ -2486,7 +2513,7 @@ function exportCSV(){
 /* ── ZIP ── */
 async function exportZip(){
   if(!receipts.length){showToast('No receipts to export');return;}
-  const btn=document.getElementById('btn-zip');btn.disabled=true;btn.textContent='⏳...';
+  const exportBtn=document.querySelector('.exp-row .exp-btn');if(exportBtn){exportBtn.disabled=true;exportBtn.textContent='⏳ Zipping...';}
   try{
     const zip=new JSZip();
     zip.file(`receipts_${FY.label.replace(/\s/g,'_')}.csv`,buildCSV());
@@ -2514,13 +2541,13 @@ async function exportZip(){
     const a=document.createElement('a');a.href=url;a.download=`receipts_${FY.label.replace(/\s/g,'_')}.zip`;a.click();
     URL.revokeObjectURL(url);showToast(`ZIP — ${n} photos + CSV + mileage`);
   }catch(e){showToast('ZIP failed: '+e.message);}
-  btn.disabled=false;btn.innerHTML='📦 ZIP';
+  if(exportBtn){exportBtn.disabled=false;exportBtn.textContent='⬆ Export';}
 }
 
 /* ── PDF ── */
 async function exportPDF(){
   if(!receipts.length){showToast('No receipts to export');return;}
-  const btn=document.getElementById('btn-pdf');btn.disabled=true;btn.textContent='⏳...';
+  const exportBtn=document.querySelector('.exp-row .exp-btn');if(exportBtn){exportBtn.disabled=true;exportBtn.textContent='⏳ Building PDF...';}
   try{
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -2590,35 +2617,60 @@ async function exportPDF(){
       const isEnt=CATS.find(x=>x.id===r.category)?.entertainment||false;
       fr(0,0,pw,20,BG);
       sf(7,'bold',MID);doc.text(`RECEIPT ${i+1} OF ${receipts.length}`,mg,7);
-      sf(15,'bold',DARK);doc.text(r.vendor,mg,15);
-      sf(15,'bold',GREEN);doc.text('$'+r.amount.toFixed(2),pw-mg,15,{align:'right'});
+      // Wrap vendor name if long
+      const vendorLines=doc.splitTextToSize(r.vendor,cw-50);
+      sf(14,'bold',DARK);doc.text(vendorLines,mg,15);
+      sf(14,'bold',GREEN);doc.text('$'+r.amount.toFixed(2),pw-mg,15,{align:'right'});
 
-      let ry=26;
+      let ry=26+(vendorLines.length>1?(vendorLines.length-1)*6:0);
       const hw=(cw-6)/2;
+
+      // Helper to draw a wrapped field box
+      const drawField=(x,y,w,lbl,val,bgCol)=>{
+        const lines=doc.splitTextToSize(String(val),w-4);
+        const boxH=Math.max(9,lines.length*4+6);
+        fr(x,y-4,w,boxH,bgCol);
+        sf(6,'bold',MID);doc.text(lbl.toUpperCase(),x+2,y);
+        sf(8,'normal',DARK);doc.text(lines,x+2,y+5);
+        return boxH+2; // return height used
+      };
+
       const fields=[
         ['Date',fmtDate(r.date)],['Category',c.label+(isEnt?' ⚠ 50% rule':'')],
         ['Claimable amount','$'+claimable.toFixed(2)],['GST amount','$'+gst.toFixed(2)],
-        ['GST included',r.gst==='yes'?'Yes':r.gst==='partial'?'Partial':'No'],['Reconciled',r.reconciled?'Yes':'No'],
+        ['GST included',r.gst==='yes'?'Yes — included':r.gst==='partial'?'Partial':'No GST'],['Reconciled',r.reconciled?'Yes':'No'],
         ['Invoice #',r.invoice||'—'],['Supplier GST #',r.suppgst||'—'],
         ['Your GST #',settings.gstn||'—'],['Receipt file',r.image?(`receipt_${r.id}.${r.image.startsWith('data:application/pdf')?'pdf':'jpg'}`):'—'],
       ];
+
       for(let fi=0;fi<fields.length;fi+=2){
         const row=fields.slice(fi,fi+2);
+        // Calculate max height for this row
+        let rowH=0;
+        row.forEach(([lbl,val],col)=>{
+          const fw=col<row.length-1||row.length===2?hw:cw;
+          const lines=doc.splitTextToSize(String(val),fw-4);
+          rowH=Math.max(rowH,Math.max(9,lines.length*4+6)+2);
+        });
         row.forEach(([lbl,val],col)=>{
           const fx=mg+col*(hw+6);
-          fr(fx,ry-4,hw,9,col===0?[248,248,246]:[244,244,242]);
-          sf(6,'bold',MID);doc.text(lbl.toUpperCase(),fx+2,ry);
-          sf(8,'normal',DARK);doc.text(String(val).substring(0,38),fx+2,ry+5);
+          const fw=row.length===1?cw:hw;
+          drawField(fx,ry,fw,lbl,val,col===0?[248,248,246]:[244,244,242]);
         });
-        ry+=11;
+        ry+=rowH;
+        if(ry>ph-30){doc.addPage();ry=mg;}
       }
+
+      // Business purpose — full width, wraps properly
       if(r.notes){
-        fr(mg,ry-4,cw,9,BG);
+        const noteLines=doc.splitTextToSize(r.notes,cw-4);
+        const noteH=Math.max(9,noteLines.length*4+6);
+        fr(mg,ry-4,cw,noteH,BG);
         sf(6,'bold',MID);doc.text('BUSINESS PURPOSE',mg+2,ry);
-        const lines=doc.splitTextToSize(r.notes,cw-4);
-        sf(8,'normal',DARK);doc.text(lines,mg+2,ry+5);
-        ry+=Math.max(11,lines.length*4+7);
+        sf(8,'normal',DARK);doc.text(noteLines,mg+2,ry+5);
+        ry+=noteH+4;
       }
+
       ry+=4;hl(ry);ry+=6;
 
       if(r.image){
@@ -2658,20 +2710,25 @@ async function exportPDF(){
       const t1r=settings.milerate||1.17, t2r=settings.milerate2||0.37;
       let cumKmLog=0;
       mileage.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>{
-        if(my>280){doc.addPage();my=mg;}
+        if(my>272){doc.addPage();my=mg;}
         const tripVal=calcMileValue(m.km,cumKmLog);
         const tier=cumKmLog+m.km<=14000?'T1':(cumKmLog>=14000?'T2':'T1+T2');
         cumKmLog+=m.km;
+        // Wrap from/to fields
+        const fromLines=doc.splitTextToSize(String(m.from||'—'),44);
+        const toLines=doc.splitTextToSize(String(m.to||'—'),44);
+        const purposeLines=m.purpose?doc.splitTextToSize(m.purpose,cw-25):[];
+        const rowH=Math.max(fromLines.length,toLines.length)*4+2;
         sf(8,'normal',DARK);
         doc.text(fmtDate(m.date),mg,my);
-        doc.text(String(m.from).substring(0,20),mg+25,my);
-        doc.text(String(m.to).substring(0,20),mg+72,my);
-        doc.text(m.odoStart!=null?m.odoStart.toLocaleString():'—',mg+118,my);
-        doc.text(m.odoEnd!=null?m.odoEnd.toLocaleString():'—',mg+142,my);
+        doc.text(fromLines,mg+25,my);
+        doc.text(toLines,mg+72,my);
+        doc.text(m.odoStart!=null?String(m.odoStart.toLocaleString()):'—',mg+118,my);
+        doc.text(m.odoEnd!=null?String(m.odoEnd.toLocaleString()):'—',mg+142,my);
         doc.text(m.km.toFixed(1)+' ('+tier+')',mg+162,my,{align:'right'});
         doc.text('$'+tripVal.toFixed(2),pw-mg,my,{align:'right'});
-        if(m.purpose){sf(7,'normal',MID);doc.text(m.purpose.substring(0,60),mg+25,my+4);}
-        my+=m.purpose?10:7;
+        if(purposeLines.length){sf(7,'normal',MID);doc.text(purposeLines,mg+25,my+rowH);}
+        my+=rowH+(purposeLines.length?purposeLines.length*3.5+2:0)+3;
       });
       my+=4;hl(my,GREEN);my+=6;
       sf(10,'bold',GREEN);
@@ -2684,7 +2741,7 @@ async function exportPDF(){
     doc.save(`expense_report_${FY.label.replace(/\s/g,'_')}.pdf`);
     showToast('PDF saved');
   }catch(e){showToast('PDF error: '+e.message);console.error(e);}
-  btn.disabled=false;btn.innerHTML='📄 PDF';
+  if(exportBtn){exportBtn.disabled=false;exportBtn.textContent='⬆ Export';}
 }
 
 
