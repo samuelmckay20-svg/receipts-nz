@@ -1511,8 +1511,8 @@ function renderOverview(){
       :
         '<div style="background:var(--surface);border-radius:16px;padding:24px 16px;margin-bottom:10px;text-align:center;">' +
           '<div style="font-size:36px;margin-bottom:8px;">🧾</div>' +
-          '<div style="font-weight:600;font-size:15px;">No receipts yet</div>' +
-          '<div style="font-size:13px;color:var(--text3);margin-top:4px;">Add receipts to see your expense breakdown</div>' +
+            '<div style="font-weight:600;font-size:15px;">Claim an expense!</div>' +
+            '<div style="font-size:13px;color:var(--text3);margin-top:4px;">Tap New expense + to log your first receipt.</div>' +
         '</div>'
       ) +
 
@@ -1587,60 +1587,70 @@ function renderOverview(){
 
 function buildDonutChart(catPairs, total){
   var size=280, cx=140, cy=140, outerR=116, innerR=100;
-  var startAngle=-Math.PI/2; // start at top
+  var startAngle=-Math.PI/2;
   var slices='';
   var legend='';
   var otherTotal=0;
-  var otherCount=0;
 
-  // Group small slices into "Other"
+  // Group tiny slices (<1%) into Other, always keep _mileage
   var mainCats=[];
   catPairs.forEach(function(pair){
     var pct=pair[1]/total;
     if(pair[0]==='_mileage'||pct>=0.01) mainCats.push(pair);
-    else { otherTotal+=pair[1]; otherCount++; }
+    else otherTotal+=pair[1];
   });
   if(otherTotal>0) mainCats.push(['_other',otherTotal]);
 
-  mainCats.forEach(function(pair, i){
-    var cat=pair[0]==='_other'?{label:'Other',icon:'📁',color:'#8E8E93'}:
-             pair[0]==='_mileage'?{label:'Mileage',icon:'🚗',color:'#5856D6'}:
-             catBy(pair[0]);
-    var pct=pair[1]/total;
-    var angle=pct*Math.PI*2;
-    var endAngle=startAngle+angle;
+  function getCat(id){
+    if(id==='_other') return {label:'Other',icon:'📁',color:'#8E8E93'};
+    if(id==='_mileage') return {label:'Mileage',icon:'🚗',color:'#5856D6'};
+    return catBy(id);
+  }
 
-    // SVG arc path
-    var x1=cx+outerR*Math.cos(startAngle);
-    var y1=cy+outerR*Math.sin(startAngle);
-    var x2=cx+outerR*Math.cos(endAngle);
-    var y2=cy+outerR*Math.sin(endAngle);
-    var ix1=cx+innerR*Math.cos(endAngle);
-    var iy1=cy+innerR*Math.sin(endAngle);
-    var ix2=cx+innerR*Math.cos(startAngle);
-    var iy2=cy+innerR*Math.sin(startAngle);
-    var large=angle>Math.PI?1:0;
-
-    slices+='<path d="M'+x1+','+y1+' A'+outerR+','+outerR+' 0 '+large+',1 '+x2+','+y2+
-      ' L'+ix1+','+iy1+' A'+innerR+','+innerR+' 0 '+large+',0 '+ix2+','+iy2+' Z" '+
-      'fill="'+cat.color+'" stroke="white" stroke-width="2"/>';
-
-    var pctLabel=Math.round(pct*100);
-    legend+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--sep-l);">'+
+  if(mainCats.length===1){
+    // Single category — draw as full ring
+    var cat=getCat(mainCats[0][0]);
+    slices=
+      '<path d="M'+cx+','+(cy-outerR)+' A'+outerR+','+outerR+' 0 1,1 '+(cx-0.01)+','+(cy-outerR)+' Z" fill="'+cat.color+'"/>'+
+      '<circle cx="'+cx+'" cy="'+cy+'" r="'+innerR+'" fill="white"/>';
+    legend='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">'+
       '<div style="display:flex;align-items:center;gap:10px;">'+
-        '<div style="width:8px;height:8px;border-radius:2px;background:'+cat.color+';flex-shrink:0;"></div>'+
-        '<span style="font-size:13px;color:var(--text1);letter-spacing:-0.1px;">'+cat.icon+' '+cat.label+'</span>'+
+        '<div style="width:8px;height:8px;border-radius:2px;background:'+cat.color+';"></div>'+
+        '<span style="font-size:13px;color:var(--text1);">'+cat.icon+' '+cat.label+'</span>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:8px;">'+
-        '<span style="font-size:11px;color:var(--text3);">'+pctLabel+'%</span>'+
-        '<span style="font-size:13px;font-weight:600;color:var(--text1);letter-spacing:-0.3px;">$'+pair[1].toFixed(2)+'</span>'+
+        '<span style="font-size:11px;color:var(--text3);">100%</span>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text1);">$'+mainCats[0][1].toFixed(2)+'</span>'+
       '</div>'+
     '</div>';
+  } else {
+    mainCats.forEach(function(pair){
+      var cat=getCat(pair[0]);
+      var pct=pair[1]/total;
+      var angle=pct*Math.PI*2;
+      var endAngle=startAngle+angle;
+      var x1=cx+outerR*Math.cos(startAngle), y1=cy+outerR*Math.sin(startAngle);
+      var x2=cx+outerR*Math.cos(endAngle),   y2=cy+outerR*Math.sin(endAngle);
+      var ix1=cx+innerR*Math.cos(endAngle),  iy1=cy+innerR*Math.sin(endAngle);
+      var ix2=cx+innerR*Math.cos(startAngle),iy2=cy+innerR*Math.sin(startAngle);
+      var large=angle>Math.PI?1:0;
+      slices+='<path d="M'+x1+','+y1+' A'+outerR+','+outerR+' 0 '+large+',1 '+x2+','+y2+
+        ' L'+ix1+','+iy1+' A'+innerR+','+innerR+' 0 '+large+',0 '+ix2+','+iy2+' Z"'+
+        ' fill="'+cat.color+'" stroke="white" stroke-width="2"/>';
+      legend+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--sep-l);">'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<div style="width:8px;height:8px;border-radius:2px;background:'+cat.color+';flex-shrink:0;"></div>'+
+          '<span style="font-size:13px;color:var(--text1);letter-spacing:-0.1px;">'+cat.icon+' '+cat.label+'</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;">'+
+          '<span style="font-size:11px;color:var(--text3);">'+Math.round(pct*100)+'%</span>'+
+          '<span style="font-size:13px;font-weight:600;color:var(--text1);letter-spacing:-0.3px;">$'+pair[1].toFixed(2)+'</span>'+
+        '</div>'+
+      '</div>';
+      startAngle=endAngle;
+    });
+  }
 
-    startAngle=endAngle;
-  });
-
-  // Centre label
   var centreLabel=
     '<text x="'+cx+'" y="'+cy+'" dy="-13" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#555555" font-family="\'Inter\',sans-serif" font-weight="600" letter-spacing="3">CLAIMABLE</text>'+
     '<text x="'+cx+'" y="'+cy+'" dy="11" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" fill="#111111" font-family="\'Inter\',sans-serif" letter-spacing="-0.5">$'+total.toFixed(2)+'</text>';
