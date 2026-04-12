@@ -1433,6 +1433,7 @@ function setOverviewFY(yr){
 }
 
 function renderOverview(){
+  try{
   var el=document.getElementById('overview-content');
   if(!el) return;
 
@@ -1496,44 +1497,15 @@ function renderOverview(){
   el.innerHTML=
     '<div style="padding:16px 16px 0;">' +
 
-      // Capture section — same as add panel
-      '<div style="background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:12px;">' +
-        '<div style="padding:11px 14px;background:linear-gradient(135deg,#30D158,#25A244);display:flex;align-items:center;justify-content:space-between;">' +
-          '<span style="font-size:13px;font-weight:700;letter-spacing:-0.2px;color:white;">New Expense</span>' +
-
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;">' +
-          '<button class="cap-btn" onclick="overviewCapture(\'camera\')">' +
-            '<div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>' +
-            '<div class="cap-btn-name">Camera</div>' +
-            '<div class="cap-btn-sub">Take photo</div>' +
-          '</button>' +
-          '<button class="cap-btn" onclick="overviewCapture(\'photo\')">' +
-            '<input type="file" id="ov-file-in" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" onchange="overviewFileChosen(event)" style="display:none">' +
-            '<div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>' +
-            '<div class="cap-btn-name">Photo</div>' +
-            '<div class="cap-btn-sub">From library</div>' +
-          '</button>' +
-          '<button class="cap-btn" onclick="overviewCapture(\'pdf\')">' +
-            '<input type="file" id="ov-pdf-in" accept="application/pdf,.pdf" onchange="overviewPDFChosen(event)" style="display:none">' +
-            '<div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>' +
-            '<div class="cap-btn-name">PDF</div>' +
-            '<div class="cap-btn-sub">Invoice / doc</div>' +
-          '</button>' +
-        '</div>' +
-      '</div>' +
-
       // 1. Donut chart — top
       (topCats.length && totalWithMileage > 0 ?
         '<div style="background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:10px;">' +
-        '<div style="background:linear-gradient(135deg,#30D158,#25A244);border-radius:16px 16px 0 0;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;">' +
+          '<div style="background:linear-gradient(135deg,#30D158,#25A244);border-radius:16px 16px 0 0;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;">' +
             '<div style="font-size:13px;font-weight:700;color:white;letter-spacing:-0.2px;">Business expenses</div>' +
-            '<select onchange="setOverviewFY(this.value)" style="font-size:11px;font-weight:600;color:white;background:rgba(255,255,255,.2);border:none;border-radius:7px;padding:3px 7px;font-family:inherit;cursor:pointer;outline:none;">' +
-              availFYs.map(function(fy){return '<option value="'+fy.startYear+'"'+(fy.startYear===selectedFYYear?' selected':'')+' style="color:black;background:white;">'+fy.label+'</option>';}).join('') +
-            '</select>' +
+            '<button onclick="showNewExpenseSheet()" style="background:rgba(255,255,255,.22);border:none;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:white;font-family:inherit;cursor:pointer;letter-spacing:-0.1px;">New expense +</button>' +
           '</div>' +
           '<div style="padding:16px;">' +
-          buildDonutChart(topCats, totalWithMileage) +
+            buildDonutChart(topCats, totalWithMileage) +
           '</div>' +
         '</div>'
       :
@@ -1606,6 +1578,11 @@ function renderOverview(){
       '</div>' +
 
     '</div>';
+  }catch(err){
+    console.error('renderOverview error:',err);
+    var el2=document.getElementById('overview-content');
+    if(el2) el2.innerHTML='<div style="padding:20px;color:red;font-size:13px;">Overview error: '+err.message+'</div>';
+  }
 }
 
 function buildDonutChart(catPairs, total){
@@ -1620,7 +1597,7 @@ function buildDonutChart(catPairs, total){
   var mainCats=[];
   catPairs.forEach(function(pair){
     var pct=pair[1]/total;
-    if(pair[0]==='_mileage'||pct>=0.04) mainCats.push(pair);
+    if(pair[0]==='_mileage'||pct>=0.01) mainCats.push(pair);
     else { otherTotal+=pair[1]; otherCount++; }
   });
   if(otherTotal>0) mainCats.push(['_other',otherTotal]);
@@ -1646,7 +1623,7 @@ function buildDonutChart(catPairs, total){
 
     slices+='<path d="M'+x1+','+y1+' A'+outerR+','+outerR+' 0 '+large+',1 '+x2+','+y2+
       ' L'+ix1+','+iy1+' A'+innerR+','+innerR+' 0 '+large+',0 '+ix2+','+iy2+' Z" '+
-      'fill="'+cat.color+'" stroke="var(--surface)" stroke-width="2"/>';
+      'fill="'+cat.color+'" stroke="white" stroke-width="2"/>';
 
     var pctLabel=Math.round(pct*100);
     legend+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--sep-l);">'+
@@ -2685,6 +2662,15 @@ async function reverseGeocode(lat,lon){
     return [p.suburb||p.neighbourhood||p.village||p.town||p.city_district,p.city||p.town||p.county].filter(Boolean).join(', ')||d.display_name.split(',').slice(0,2).join(',').trim();
   }catch(e){return lat.toFixed(4)+', '+lon.toFixed(4);}
 }
+
+function showNewExpenseSheet(){
+  showActionSheet('New Expense', [
+    {label:'📷  Camera', action:"overviewCapture('camera')"},
+    {label:'🖼️  Photo Library', action:"overviewCapture('photo')"},
+    {label:'📄  PDF / Invoice', action:"overviewCapture('pdf')"},
+  ]);
+}
+
 
 function addReceiptFromOverview(){
   goTab('add');
@@ -3752,5 +3738,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+<!-- Hidden file inputs for overview capture -->
+<input type="file" id="ov-file-in" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" onchange="overviewFileChosen(event)" style="display:none">
+<input type="file" id="ov-pdf-in" accept="application/pdf,.pdf" onchange="overviewPDFChosen(event)" style="display:none">
 </body>
 </html>
