@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
@@ -928,6 +929,54 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
 <div class="toast" id="toast"></div>
 
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-bg" id="chpw-bg" onclick="closeModal('chpw')"></div>
+<div class="modal" id="modal-chpw">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr"><span></span><span class="modal-title">Change Password</span><button class="modal-back" onclick="closeModal('chpw')">Done</button></div>
+  <div class="modal-inner">
+    <div class="g-list" style="margin-bottom:12px;">
+      <div class="g-row"><div class="g-icon" style="background:rgba(0,122,255,.1)">🔒</div><span class="g-lbl">Current password</span><input class="g-input g-input-sm" type="password" id="chpw-current" placeholder="Current password" autocomplete="current-password"></div>
+      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">🔑</div><span class="g-lbl">New password</span><input class="g-input g-input-sm" type="password" id="chpw-new" placeholder="New password" autocomplete="new-password"></div>
+      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">✅</div><span class="g-lbl">Confirm new</span><input class="g-input g-input-sm" type="password" id="chpw-confirm" placeholder="Confirm new password" autocomplete="new-password"></div>
+    </div>
+    <div id="chpw-error" style="color:var(--red);font-size:13px;text-align:center;margin-bottom:8px;min-height:18px;"></div>
+    <button class="chpw-save-btn" onclick="doChangePassword()" style="width:100%;padding:15px;border-radius:14px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;">Update Password</button>
+    <div class="pb"></div>
+  </div>
+</div>
+
+<!-- MANAGE USERS MODAL -->
+<div class="modal-bg" id="mgr-bg" onclick="closeModal('mgr')"></div>
+<div class="modal" id="modal-mgr">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr"><span></span><span class="modal-title">Manage Users</span><button class="modal-back" onclick="closeModal('mgr')">Done</button></div>
+  <div class="modal-inner">
+    <button onclick="adminCreateUser()" style="width:100%;padding:14px;border-radius:14px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:16px;">＋ Add New User</button>
+    <div id="mgr-user-list"></div>
+    <div class="pb"></div>
+  </div>
+</div>
+<div class="login-screen" id="login-screen">
+  <div class="login-logo">🧾</div>
+  <div class="login-title">Receipts NZ</div>
+  <div class="login-sub">Sign in to your account</div>
+  <div class="login-form">
+    <input class="login-field" type="text" id="login-username" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <input class="login-field" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+    <label style="display:flex;align-items:center;gap:10px;padding:4px 2px 12px;cursor:pointer;user-select:none;">
+      <div style="position:relative;width:44px;height:26px;flex-shrink:0;" onclick="toggleKeepSignedIn()">
+        <div id="keep-track" style="position:absolute;inset:0;border-radius:13px;background:var(--fill2);transition:background .2s;"></div>
+        <div id="keep-thumb" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s;"></div>
+      </div>
+      <span style="font-size:14px;color:var(--text2);">Stay signed in</span>
+    </label>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+  <div class="login-version">Receipts NZ</div>
+</div>
+
 <script>
 /* ── DATA ── */
 const CATS=[
@@ -1001,8 +1050,14 @@ async function syncToServer(){
     if(res.ok){
       setSyncStatus('✓ Synced to Synology '+new Date().toLocaleTimeString('en-NZ'),true);
       localStorage.setItem('nzrt_last_sync', new Date().toISOString());
+      // Save fresh token if server returned one (sliding 30-day window)
+      const data=await res.json().catch(()=>{});
+      if(data&&data.token) localStorage.setItem('nzrt_token', data.token);
     } else if(res.status===401){
       setSyncStatus('Session expired — please sign in again', false);
+      // Stash current local data so it survives re-login
+      if(receipts.length) localStorage.setItem('nzrt_pending_r', JSON.stringify(receipts));
+      if(mileage.length) localStorage.setItem('nzrt_pending_m', JSON.stringify(mileage));
       localStorage.removeItem('nzrt_token');
       localStorage.removeItem('nzrt_username');
       localStorage.removeItem('nzrt_role');
@@ -1022,34 +1077,67 @@ async function loadFromServer(){
     setSyncStatus('Loading from Synology...', true);
     const res=await fetch(url+'/data',{headers:getAuthHeaders()});
     if(res.status===401){
-      // Token expired or invalid - force re-login
+      // Token expired - save any local receipts before clearing token
+      const localReceipts=[...receipts];
+      const localMileage=[...mileage];
       localStorage.removeItem('nzrt_token');
       localStorage.removeItem('nzrt_username');
       localStorage.removeItem('nzrt_role');
+      // Stash local-only data so it survives re-login
+      if(localReceipts.length) localStorage.setItem('nzrt_pending_r', JSON.stringify(localReceipts));
+      if(localMileage.length) localStorage.setItem('nzrt_pending_m', JSON.stringify(localMileage));
       showLoginScreen();
       return false;
     }
     if(!res.ok) return false;
     const data=await res.json();
-    if(data.receipts) receipts=data.receipts;
-    if(data.mileage) mileage=data.mileage;
+
+    // Merge server data with any local-only entries (added while offline/logged out)
+    if(data.receipts){
+      const serverIds=new Set(data.receipts.map(r=>r.id));
+      const localOnly=receipts.filter(r=>!serverIds.has(r.id));
+      receipts=data.receipts;
+      // Prepend local-only entries and sync them up
+      if(localOnly.length){
+        receipts=[...localOnly,...receipts];
+        showToast(`Kept ${localOnly.length} offline receipt${localOnly.length>1?'s':''} ✓`);
+      }
+    }
+    if(data.mileage){
+      const serverIds=new Set(data.mileage.map(m=>m.id));
+      const localOnly=mileage.filter(m=>!serverIds.has(m.id));
+      mileage=data.mileage;
+      if(localOnly.length) mileage=[...localOnly,...mileage];
+    }
     if(data.settings) settings=Object.assign(settings,data.settings);
     if(data.bin) bin=data.bin;
-    save(); // persist to localStorage as cache
+
+    // Restore any pending data stashed during a 401
+    const pendingR=localStorage.getItem('nzrt_pending_r');
+    const pendingM=localStorage.getItem('nzrt_pending_m');
+    if(pendingR){
+      const pending=JSON.parse(pendingR);
+      const existing=new Set(receipts.map(r=>r.id));
+      const newOnes=pending.filter(r=>!existing.has(r.id));
+      if(newOnes.length){ receipts=[...newOnes,...receipts]; showToast(`Restored ${newOnes.length} offline receipt${newOnes.length>1?'s':''} ✓`); }
+      localStorage.removeItem('nzrt_pending_r');
+    }
+    if(pendingM){
+      const pending=JSON.parse(pendingM);
+      const existing=new Set(mileage.map(m=>m.id));
+      mileage=[...pending.filter(m=>!existing.has(m.id)),...mileage];
+      localStorage.removeItem('nzrt_pending_m');
+    }
+
+    save(); // persist merged data and sync back to server
     updateStats();
-    setSyncStatus('✓ Loaded from Synology', true);
+    setSyncStatus('✓ Synced with Synology', true);
     return true;
   }catch(e){
     setSyncStatus('Could not reach Synology — using local data', false);
     return false;
   }
 }
-
-// Auto-load from server on startup if logged in
-(async()=>{
-  if(isLoggedIn()) await loadFromServer();
-  else showLoginScreen();
-})();
 
 function save(){
   try{
@@ -1454,21 +1542,36 @@ function openCamOrFileEdit(){
   else { document.getElementById('modal-cam-file-in').click(); }
 }
 
-// Convert HEIC/HEIF to JPEG using canvas (browser handles decoding on macOS/iOS)
+// Convert HEIC/HEIF to JPEG using heic2any library
 async function convertToJpeg(file){
-  return new Promise((resolve,reject)=>{
-    const url=URL.createObjectURL(file);
-    const img=new Image();
-    img.onload=()=>{
-      const canvas=document.createElement('canvas');
-      canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
-      canvas.getContext('2d').drawImage(img,0,0);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg',0.92));
-    };
-    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode image')); };
-    img.src=url;
-  });
+  try{
+    // Use heic2any library if available
+    if(window.heic2any){
+      const blob=await heic2any({blob:file,toType:'image/jpeg',quality:0.92});
+      return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=ev=>resolve(ev.target.result);
+        reader.onerror=reject;
+        reader.readAsDataURL(blob instanceof Array?blob[0]:blob);
+      });
+    }
+    // Fallback: try canvas decode (works on some browsers)
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+        canvas.getContext('2d').drawImage(img,0,0);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg',0.92));
+      };
+      img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode HEIC')); };
+      img.src=url;
+    });
+  }catch(e){
+    throw new Error('HEIC conversion failed: '+e.message);
+  }
 }
 async function startStream(){
   document.getElementById('cam-wrap').classList.add('open');
@@ -1504,7 +1607,7 @@ async function onFile(e){
       const bytes=(data.length-22)*3/4;
       imgData=bytes>1.5*1024*1024?await compressImage(data,1.5*1024*1024):data;
       showPreview();
-    }catch(err){ showToast('Could not read HEIC — try exporting as JPEG first'); }
+    }catch(err){ showToast('HEIC conversion failed — on Mac, right-click file → "Convert Image" → JPEG'); }
     return;
   }
   const reader=new FileReader();
@@ -1625,7 +1728,7 @@ async function onFileEdit(e){
       showToast('Converting HEIC...');
       const data=await convertToJpeg(f);
       editImgData=data;showPreviewEdit();
-    }catch(err){ showToast('Could not read HEIC — try exporting as JPEG first'); }
+    }catch(err){ showToast('HEIC conversion failed — on Mac, right-click file → "Convert Image" → JPEG'); }
     return;
   }
   const r=new FileReader();
@@ -2884,9 +2987,28 @@ async function exportPDF(){
 
 
 /* ── AUTH ── */
+let keepSignedIn = localStorage.getItem('nzrt_keep_signed_in') === '1';
+
+function toggleKeepSignedIn(){
+  keepSignedIn = !keepSignedIn;
+  localStorage.setItem('nzrt_keep_signed_in', keepSignedIn ? '1' : '0');
+  updateKeepToggle();
+}
+
+function updateKeepToggle(){
+  const track = document.getElementById('keep-track');
+  const thumb = document.getElementById('keep-thumb');
+  if(!track||!thumb) return;
+  track.style.background = keepSignedIn ? 'var(--blue)' : 'var(--fill2)';
+  thumb.style.transform = keepSignedIn ? 'translateX(18px)' : 'translateX(0)';
+}
+
 function showLoginScreen(){
   document.getElementById('login-screen').classList.add('show');
+  // Restore toggle state
+  updateKeepToggle();
 }
+
 function hideLoginScreen(){
   document.getElementById('login-screen').classList.remove('show');
 }
@@ -2904,13 +3026,14 @@ async function doLogin(){
     const res=await fetch(url+'/auth/login',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-secret':secret},
-      body:JSON.stringify({username,password})
+      body:JSON.stringify({username,password,keepSignedIn})
     });
     const data=await res.json();
     if(!res.ok){errEl.textContent=data.error||'Login failed';btn.textContent='Sign In';btn.disabled=false;return;}
     localStorage.setItem('nzrt_token',data.token);
     localStorage.setItem('nzrt_username',data.username);
     localStorage.setItem('nzrt_role',data.role);
+    localStorage.setItem('nzrt_keep_signed_in', keepSignedIn?'1':'0');
     hideLoginScreen();
     await loadFromServer();
     updateStats();renderList();
@@ -2922,12 +3045,6 @@ async function doLogin(){
 }
 
 // Allow pressing Enter to login
-document.addEventListener('DOMContentLoaded',()=>{
-  ['login-username','login-password'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-  });
-});
 
 function doLogout(){
   if(!confirm('Sign out?')) return;
@@ -3069,53 +3186,22 @@ async function adminDeleteUser(userId,username){
 }
 
 /* ── INIT ── */
-updateStats();
-renderList();
-// iOS PWA: ensure page is scrolled to top so shell fills screen correctly
-document.documentElement.scrollTop = 0;
-document.body.scrollTop = 0;
-
+document.addEventListener('DOMContentLoaded', async () => {
+  buildCats('cat-scroll', selCat, 'pickCat', true);
+  updateStats();
+  renderList();
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  // Add Enter key support for login fields
+  ['login-username','login-password'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  });
+  // Auto-load from server on startup if logged in
+  if(isLoggedIn()) await loadFromServer();
+  else showLoginScreen();
+});
 </script>
 
-<!-- CHANGE PASSWORD MODAL -->
-<div class="modal-bg" id="chpw-bg" onclick="closeModal('chpw')"></div>
-<div class="modal" id="modal-chpw">
-  <div class="modal-handle"></div>
-  <div class="modal-hdr"><span></span><span class="modal-title">Change Password</span><button class="modal-back" onclick="closeModal('chpw')">Done</button></div>
-  <div class="modal-inner">
-    <div class="g-list" style="margin-bottom:12px;">
-      <div class="g-row"><div class="g-icon" style="background:rgba(0,122,255,.1)">🔒</div><span class="g-lbl">Current password</span><input class="g-input g-input-sm" type="password" id="chpw-current" placeholder="Current password" autocomplete="current-password"></div>
-      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">🔑</div><span class="g-lbl">New password</span><input class="g-input g-input-sm" type="password" id="chpw-new" placeholder="New password" autocomplete="new-password"></div>
-      <div class="g-row"><div class="g-icon" style="background:rgba(52,199,89,.1)">✅</div><span class="g-lbl">Confirm new</span><input class="g-input g-input-sm" type="password" id="chpw-confirm" placeholder="Confirm new password" autocomplete="new-password"></div>
-    </div>
-    <div id="chpw-error" style="color:var(--red);font-size:13px;text-align:center;margin-bottom:8px;min-height:18px;"></div>
-    <button class="chpw-save-btn" onclick="doChangePassword()" style="width:100%;padding:15px;border-radius:14px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;">Update Password</button>
-    <div class="pb"></div>
-  </div>
-</div>
-
-<!-- MANAGE USERS MODAL -->
-<div class="modal-bg" id="mgr-bg" onclick="closeModal('mgr')"></div>
-<div class="modal" id="modal-mgr">
-  <div class="modal-handle"></div>
-  <div class="modal-hdr"><span></span><span class="modal-title">Manage Users</span><button class="modal-back" onclick="closeModal('mgr')">Done</button></div>
-  <div class="modal-inner">
-    <button onclick="adminCreateUser()" style="width:100%;padding:14px;border-radius:14px;border:none;background:rgba(52,199,89,.1);color:var(--accent-dark);font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:16px;">＋ Add New User</button>
-    <div id="mgr-user-list"></div>
-    <div class="pb"></div>
-  </div>
-</div>
-<div class="login-screen" id="login-screen">
-  <div class="login-logo">🧾</div>
-  <div class="login-title">Receipts NZ</div>
-  <div class="login-sub">Sign in to your account</div>
-  <div class="login-form">
-    <input class="login-field" type="text" id="login-username" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
-    <input class="login-field" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-    <button class="login-btn" onclick="doLogin()">Sign In</button>
-    <div class="login-error" id="login-error"></div>
-  </div>
-  <div class="login-version">Receipts NZ</div>
-</div>
 </body>
 </html>
