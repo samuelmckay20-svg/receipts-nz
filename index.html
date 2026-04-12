@@ -55,7 +55,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 .nav-settings-btn { background:none; border:none; font-size:20px; cursor:pointer; padding:2px 0 2px 8px; }
 
 /* SUMMARY */
-.sum-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:14px 16px 8px; }
+.sum-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:10px 16px 10px; border-bottom:0.5px solid var(--sep-l); background:var(--bg); flex-shrink:0; }
 .sum-card { background:var(--surface); border-radius:14px; padding:12px 12px 10px; }
 .sum-lbl { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:5px; }
 .sum-val { font-size:18px; font-weight:700; letter-spacing:-0.5px; font-variant-numeric:tabular-nums; }
@@ -312,13 +312,13 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
   </div>
+  <div class="sum-row" id="sum-row">
+    <div class="sum-card"><div class="sum-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
+    <div class="sum-card"><div class="sum-lbl">GST back</div><div class="sum-val amber" id="s-gst">$0.00</div></div>
+    <div class="sum-card"><div class="sum-lbl">Reconciled</div><div class="sum-val" id="s-recon">0/0</div></div>
+  </div>
 
   <div class="scroller" id="scroller">
-    <div class="sum-row" id="sum-row" style="display:grid">
-      <div class="sum-card"><div class="sum-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
-      <div class="sum-card"><div class="sum-lbl">GST back</div><div class="sum-val amber" id="s-gst">$0.00</div></div>
-      <div class="sum-card"><div class="sum-lbl">Reconciled</div><div class="sum-val" id="s-recon">0/0</div></div>
-    </div>
 
     <!-- ADD PANEL -->
     <div id="p-add" style="display:none">
@@ -340,19 +340,20 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
           <div id="pdf-prev-name" style="padding:8px 14px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--sep-l);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--surface);">invoice.pdf</div>
         </div>
         <div class="cap-btns" style="grid-template-columns:1fr 1fr 1fr;">
-          <button class="cap-btn" onclick="openCam()">
+          <button class="cap-btn" onclick="openCamOrFile()">
+            <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" id="cam-file-in" onchange="onFile(event)" style="display:none">
             <div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>
             <div class="cap-btn-name">Camera</div>
             <div class="cap-btn-sub">Take photo</div>
           </button>
           <button class="cap-btn">
-            <input type="file" accept="image/*" id="file-in" onchange="onFile(event)">
+            <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" id="file-in" onchange="onFile(event)">
             <div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>
             <div class="cap-btn-name">Photo</div>
             <div class="cap-btn-sub">From library</div>
           </button>
           <button class="cap-btn">
-            <input type="file" accept="application/pdf" id="pdf-in" onchange="onPDF(event)">
+            <input type="file" accept="application/pdf,.pdf" id="pdf-in" onchange="onPDF(event)">
             <div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>
             <div class="cap-btn-name">PDF</div>
             <div class="cap-btn-sub">Invoice / doc</div>
@@ -631,17 +632,18 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         <div id="modal-pdf-name" style="padding:8px 14px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--sep-l);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--surface);">invoice.pdf</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
-        <button class="cap-btn" onclick="openCamEdit()">
+        <button class="cap-btn" onclick="openCamOrFileEdit()">
+          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" id="modal-cam-file-in" onchange="onFileEdit(event)" style="display:none">
           <div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>
           <div class="cap-btn-name">Camera</div>
         </button>
         <button class="cap-btn">
-          <input type="file" accept="image/*" id="modal-file-in" onchange="onFileEdit(event)">
+          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" id="modal-file-in" onchange="onFileEdit(event)">
           <div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>
           <div class="cap-btn-name">Photo</div>
         </button>
         <button class="cap-btn">
-          <input type="file" accept="application/pdf" id="modal-pdf-in" onchange="onPDFEdit(event)">
+          <input type="file" accept="application/pdf,.pdf" id="modal-pdf-in" onchange="onPDFEdit(event)">
           <div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>
           <div class="cap-btn-name">PDF</div>
         </button>
@@ -1240,8 +1242,37 @@ function buildCats(cid,selId,cb,watchEnt){
   ).join('');
 }
 buildCats('cat-scroll','other','pickCat',true);
-function pickCat(id,watchEnt){selCat=id;buildCats('cat-scroll',selCat,'pickCat',true);if(watchEnt)updateEntWarn('ent-warn',id);calcLiveGST();}
-function pickCatEdit(id){editCat=id;buildCats('modal-cat-scroll',editCat,'pickCatEdit',false);updateEntWarn('e-ent-warn',id);}
+function pickCat(id,watchEnt){
+  selCat=id;
+  buildCats('cat-scroll',selCat,'pickCat',true);
+  if(watchEnt) updateEntWarn('ent-warn',id);
+  // Auto-apply 50% rule for entertainment
+  const cat=CATS.find(c=>c.id===id);
+  const claimEl=document.getElementById('f-claimpct');
+  if(claimEl){
+    if(cat&&cat.entertainment){
+      if(!claimEl.value||claimEl.value==='100') claimEl.value='50';
+    } else {
+      if(claimEl.value==='50'&&selCat!==id) claimEl.value='';
+    }
+  }
+  calcLiveGST();
+}
+function pickCatEdit(id){
+  editCat=id;
+  buildCats('modal-cat-scroll',editCat,'pickCatEdit',false);
+  updateEntWarn('e-ent-warn',id);
+  // Auto-apply 50% rule for entertainment
+  const cat=CATS.find(c=>c.id===id);
+  const claimEl=document.getElementById('e-claimpct');
+  if(claimEl){
+    if(cat&&cat.entertainment){
+      if(!claimEl.value||claimEl.value==='100') claimEl.value='50';
+    } else {
+      if(claimEl.value==='50') claimEl.value='';
+    }
+  }
+}
 
 function updateEntWarn(warnId,catId){
   const cat=CATS.find(c=>c.id===catId);
@@ -1256,8 +1287,7 @@ function goTab(t){
     if(panel) panel.style.display=n===t?'block':'none';
     if(tabBtn) tabBtn.classList.toggle('on',n===t);
   });
-  // Summary cards only on receipts tab
-  document.getElementById('sum-row').style.display=t==='list'?'grid':'none';
+  // Summary cards always visible
   document.getElementById('scroller').scrollTop=0;
   if(t==='add'){
     const today=new Date().toISOString().split('T')[0];
@@ -1409,6 +1439,37 @@ function emptyBin(){
 /* ── CAMERA ── */
 async function openCam(){camTarget='add';await startStream();}
 async function openCamEdit(){camTarget='edit';await startStream();}
+
+// On desktop, Camera button falls back to file picker; on mobile opens camera
+function openCamOrFile(){
+  const hasCamera=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if(hasCamera&&isMobile){ openCam(); }
+  else { document.getElementById('cam-file-in').click(); }
+}
+function openCamOrFileEdit(){
+  const hasCamera=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
+  const isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if(hasCamera&&isMobile){ openCamEdit(); }
+  else { document.getElementById('modal-cam-file-in').click(); }
+}
+
+// Convert HEIC/HEIF to JPEG using canvas (browser handles decoding on macOS/iOS)
+async function convertToJpeg(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+      canvas.getContext('2d').drawImage(img,0,0);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg',0.92));
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Could not decode image')); };
+    img.src=url;
+  });
+}
 async function startStream(){
   document.getElementById('cam-wrap').classList.add('open');
   if(stream)stream.getTracks().forEach(t=>t.stop());
@@ -1433,20 +1494,54 @@ async function snapPhoto(){
 function closeCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}document.getElementById('cam-wrap').classList.remove('open');}
 
 /* ── PHOTOS ── */
-function onFile(e){
+async function onFile(e){
   const f=e.target.files[0];if(!f)return;
+  const isHEIC=f.type==='image/heic'||f.type==='image/heif'||f.name.toLowerCase().endsWith('.heic')||f.name.toLowerCase().endsWith('.heif');
+  if(isHEIC){
+    try{
+      showToast('Converting HEIC...');
+      const data=await convertToJpeg(f);
+      const bytes=(data.length-22)*3/4;
+      imgData=bytes>1.5*1024*1024?await compressImage(data,1.5*1024*1024):data;
+      showPreview();
+    }catch(err){ showToast('Could not read HEIC — try exporting as JPEG first'); }
+    return;
+  }
   const reader=new FileReader();
   reader.onload=async ev=>{
     let data=ev.target.result;
-    // Compress large images to save localStorage space (max 1.5MB stored)
     const bytes=(data.length-22)*3/4;
     if(bytes>1.5*1024*1024) data=await compressImage(data,1.5*1024*1024);
     imgData=data;showPreview();
   };
   reader.readAsDataURL(f);
+  e.target.value='';
 }
 
 // Render first page of a PDF data URL onto a canvas element
+// Render all pages of a PDF data URL and return array of JPEG data URLs
+async function pdfToImages(dataUrl, scale=2){
+  try{
+    if(!window.pdfjsLib) return [];
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const b64=dataUrl.split(',')[1];
+    const bytes=atob(b64);
+    const arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+    const pdf=await pdfjsLib.getDocument({data:arr}).promise;
+    const images=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const vp=page.getViewport({scale});
+      const canvas=document.createElement('canvas');
+      canvas.width=vp.width; canvas.height=vp.height;
+      await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+      images.push({dataUrl:canvas.toDataURL('image/jpeg',0.92), width:vp.width, height:vp.height, aspect:vp.width/vp.height});
+    }
+    return images;
+  }catch(e){console.warn('PDF render error:',e);return [];}
+}
+
 async function renderPDFPreview(dataUrl, canvasId){
   try{
     if(!window.pdfjsLib) return;
@@ -1522,7 +1617,22 @@ function clearImg(){
   document.getElementById('ai-btn-wrap').style.display='none';
   document.getElementById('ai-result').style.display='none';
 }
-function onFileEdit(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{editImgData=ev.target.result;showPreviewEdit();};r.readAsDataURL(f);}
+async function onFileEdit(e){
+  const f=e.target.files[0];if(!f)return;
+  const isHEIC=f.type==='image/heic'||f.type==='image/heif'||f.name.toLowerCase().endsWith('.heic')||f.name.toLowerCase().endsWith('.heif');
+  if(isHEIC){
+    try{
+      showToast('Converting HEIC...');
+      const data=await convertToJpeg(f);
+      editImgData=data;showPreviewEdit();
+    }catch(err){ showToast('Could not read HEIC — try exporting as JPEG first'); }
+    return;
+  }
+  const r=new FileReader();
+  r.onload=ev=>{editImgData=ev.target.result;showPreviewEdit();};
+  r.readAsDataURL(f);
+  e.target.value='';
+}
 function showPreviewEdit(){
   const isPDF=editImgData&&editImgData.startsWith('data:application/pdf');
   document.getElementById('modal-prev-wrap').style.display=isPDF?'none':'block';
@@ -1709,7 +1819,15 @@ async function analyseReceipt(){
 Reply ONLY with a single valid JSON object. No markdown, no explanation, no extra text:
 {"vendor":"merchant name","amount":123.45,"date":"YYYY-MM-DD","invoice_number":"","supplier_gst":"","has_gst":true,"category":"meals|transport|office|software|marketing|professional|accommodation|utilities|other","notes":"brief description of what was purchased"}
 
-Rules:
+Category rules:
+- Use "meals" for ANY food, drinks, restaurants, cafes, takeaways, supermarket food, coffee, alcohol, entertainment or hospitality
+- Use "transport" for fuel, parking, taxis, Uber, public transport
+- Use "office" for stationery, printing, office supplies
+- Use "software" for apps, subscriptions, SaaS tools
+- Use "professional" for legal, accounting, consulting fees
+- Use "accommodation" for hotels, Airbnb, travel
+
+Other rules:
 - amount must be a number (the GST-inclusive total), not a string
 - date must be YYYY-MM-DD format, today is ${new Date().toISOString().split('T')[0]}
 - has_gst should be true if you see a GST number or GST amount on the receipt
@@ -1738,7 +1856,11 @@ Rules:
     if(p.date)document.getElementById('f-date').value=p.date;
     if(p.invoice_number)document.getElementById('f-invoice').value=p.invoice_number;
     if(p.supplier_gst)document.getElementById('f-suppgst').value=formatGSTNum(p.supplier_gst);
-    if(p.category){selCat=p.category;buildCats('cat-scroll',selCat,'pickCat',true);}
+    const catMap={'meals':'meals','food':'meals','restaurant':'meals','entertainment':'meals','cafe':'meals','transport':'motor','office':'office','software':'software','marketing':'marketing','professional':'professional','accommodation':'travel','utilities':'other','other':'other'};
+    if(p.category){
+      const mappedCat=catMap[p.category]||'other';
+      pickCat(mappedCat, true); // uses pickCat so 50% rule fires automatically
+    }
     if(p.notes)document.getElementById('f-notes').value=p.notes;
     document.getElementById('f-gst').value=p.has_gst?'yes':'no';
     const box=document.getElementById('ai-result');
@@ -2474,17 +2596,24 @@ async function exportPeriodPDF(){
       cy+=3;hl(cy);cy+=5;
       if(r.image){
         try{
-          await new Promise(res=>{
-            const img=new Image();img.onload=()=>{
-              const asp=img.naturalWidth/img.naturalHeight;
-              const maxW=cw,maxH=ph-cy-16;
-              let dw,dh;if(asp>=maxW/maxH){dw=maxW;dh=maxW/asp;}else{dh=maxH;dw=maxH*asp;}
-              if(cy+dh>ph-14){doc.addPage();cy=mg;}
-              sf(7,'bold',MID);doc.text('RECEIPT IMAGE',mg,cy);cy+=4;
-              doc.addImage(r.image,'JPEG',mg+(cw-dw)/2,cy,dw,dh,undefined,'FAST');cy+=dh+4;res();
-            };img.onerror=res;img.src=r.image;
-          });
-        }catch(e){}
+          const isPDF=r.image.startsWith('data:application/pdf');
+          const images=isPDF ? await pdfToImages(r.image,2) : [{dataUrl:r.image,aspect:null}];
+          if(images.length===0){sf(8,'normal',MID);doc.text('[Could not render PDF]',mg,cy);cy+=8;}
+          for(let pi=0;pi<images.length;pi++){
+            const imgItem=images[pi];
+            await new Promise(res=>{
+              const img=new Image();img.onload=()=>{
+                const asp=img.naturalWidth/img.naturalHeight;
+                const maxW=cw,maxH=ph-cy-20;
+                let dw,dh;if(asp>=maxW/maxH){dw=maxW;dh=maxW/asp;}else{dh=maxH;dw=maxH*asp;}
+                if(cy+dh+10>ph-14){doc.addPage();cy=mg;}
+                if(pi===0){sf(7,'bold',MID);doc.text(isPDF?`RECEIPT PDF (${images.length} page${images.length>1?'s':''})` :'RECEIPT IMAGE',mg,cy);cy+=4;}
+                if(isPDF&&images.length>1){sf(6,'normal',MID);doc.text(`Page ${pi+1} of ${images.length}`,mg,cy);cy+=3;}
+                doc.addImage(imgItem.dataUrl,'JPEG',mg+(cw-dw)/2,cy,dw,dh,undefined,'FAST');cy+=dh+6;res();
+              };img.onerror=res;img.src=imgItem.dataUrl;
+            });
+          }
+        }catch(e){sf(8,'normal',MID);doc.text('[Image unavailable]',mg,cy);cy+=8;}
       }
       sf(7,'normal',[180,180,180]);doc.text(`ID: ${r.id}  ·  ${settings.bizname||'NZ Receipt Tracker'}  ·  GST# ${settings.gstn||'—'}`,pw/2,ph-6,{align:'center'});
     }
@@ -2675,21 +2804,30 @@ async function exportPDF(){
 
       if(r.image){
         try{
-          await new Promise(res=>{
-            const img=new Image();
-            img.onload=()=>{
-              const natW=img.naturalWidth||1200,natH=img.naturalHeight||900,aspect=natW/natH;
-              const maxW=cw,maxH=ph-ry-16;
-              let dw,dh;
-              if(aspect>=(maxW/maxH)){dw=maxW;dh=maxW/aspect;}else{dh=maxH;dw=maxH*aspect;}
-              if(ry+dh>ph-14){doc.addPage();ry=mg;const mH2=ph-ry-16;if(aspect>=(maxW/mH2)){dw=maxW;dh=maxW/aspect;}else{dh=mH2;dw=mH2*aspect;}}
-              sf(7,'bold',MID);doc.text('RECEIPT IMAGE',mg,ry);ry+=4;
-              doc.addImage(r.image,'JPEG',mg+(cw-dw)/2,ry,dw,dh,undefined,'FAST');
-              ry+=dh+4;res();
-            };
-            img.onerror=res;img.src=r.image;
-          });
-        }catch(e){sf(8,'normal',MID);doc.text('[Image unavailable]',mg,ry);}
+          const isPDF=r.image.startsWith('data:application/pdf');
+          const images=isPDF ? await pdfToImages(r.image,2) : [{dataUrl:r.image,aspect:null}];
+          if(images.length===0){sf(8,'normal',MID);doc.text('[Could not render PDF]',mg,ry);ry+=8;}
+          for(let pi=0;pi<images.length;pi++){
+            const imgItem=images[pi];
+            await new Promise(res=>{
+              const img=new Image();
+              img.onload=()=>{
+                const natW=img.naturalWidth||1200,natH=img.naturalHeight||900;
+                const aspect=natW/natH;
+                const maxW=cw,maxH=ph-ry-20;
+                let dw,dh;
+                if(aspect>=(maxW/maxH)){dw=maxW;dh=maxW/aspect;}else{dh=maxH;dw=maxH*aspect;}
+                if(ry+dh+10>ph-14){doc.addPage();ry=mg;}
+                if(pi===0){sf(7,'bold',MID);doc.text(isPDF?`RECEIPT PDF (${images.length} page${images.length>1?'s':''})` :'RECEIPT IMAGE',mg,ry);ry+=4;}
+                if(isPDF&&images.length>1){sf(6,'normal',MID);doc.text(`Page ${pi+1} of ${images.length}`,mg,ry);ry+=3;}
+                doc.addImage(imgItem.dataUrl,'JPEG',mg+(cw-dw)/2,ry,dw,dh,undefined,'FAST');
+                ry+=dh+6;res();
+              };
+              img.onerror=res;
+              img.src=imgItem.dataUrl;
+            });
+          }
+        }catch(e){sf(8,'normal',MID);doc.text('[Image unavailable]',mg,ry);ry+=8;}
       } else {
         fr(mg,ry,cw,16,[245,245,242]);sf(9,'normal',MID);doc.text('No receipt image attached',pw/2,ry+10,{align:'center'});ry+=20;
       }
