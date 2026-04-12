@@ -295,6 +295,13 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 .login-btn:active { opacity:.85; }
 .login-error { color:var(--red); font-size:14px; text-align:center; margin-top:12px; min-height:20px; }
 .login-version { position:absolute; bottom:40px; font-size:12px; color:var(--text4); }
+
+.search-bar-wrap { padding:8px 16px 0; position:relative; }
+.search-bar { width:100%; padding:9px 14px 9px 36px; border-radius:12px; border:none; background:var(--fill2); font-family:inherit; font-size:15px; color:var(--text1); outline:none; box-sizing:border-box; -webkit-appearance:none; }
+.search-bar::placeholder { color:var(--text3); }
+.search-bar-icon { position:absolute; left:28px; top:50%; transform:translateY(-50%); font-size:15px; pointer-events:none; color:var(--text3); }
+.search-clear { position:absolute; right:28px; top:50%; transform:translateY(-50%); background:var(--fill3); border:none; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; display:none; align-items:center; justify-content:center; color:var(--text2); padding:0; }
+
 </style>
 </head>
 <body>
@@ -471,6 +478,11 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
     <!-- LIST PANEL -->
     <div id="p-list">
+      <div class="search-bar-wrap" id="search-wrap">
+        <span class="search-bar-icon">🔍</span>
+        <input class="search-bar" type="search" id="receipt-search" placeholder="Search receipts..." oninput="onSearchInput()" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button class="search-clear" id="search-clear" onclick="clearSearch()">✕</button>
+      </div>
       <div class="filt-row" id="filt-row"></div>
       <div class="exp-row">
         <button class="exp-btn" onclick="openExportSheet()" style="background:rgba(0,122,255,.1);color:var(--blue);">⬆ Export</button>
@@ -506,7 +518,24 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
           <span class="g-val green" id="mile-total-val">$0.00</span>
         </div>
       </div>
-      <button class="save-btn" style="background:var(--blue);margin-bottom:12px;" onclick="openMileModal(null)">+ Log a trip</button>
+      <div style="display:flex;gap:8px;margin:0 16px 12px;">
+        <button class="save-btn" style="background:var(--blue);flex:1;margin:0;" onclick="openMileModal(null)">+ Log a trip</button>
+        <button id="gps-track-btn" class="save-btn" style="flex:1;margin:0;background:rgba(52,199,89,.15);color:var(--accent-dark);border:1.5px solid rgba(52,199,89,.3);" onclick="startGPSTrip()">📍 Track Trip</button>
+      </div>
+      <!-- GPS active banner -->
+      <div id="gps-active-banner" style="display:none;margin:0 16px 12px;background:rgba(52,199,89,.12);border:1.5px solid rgba(52,199,89,.4);border-radius:14px;padding:14px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">🟢</span>
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--accent-dark);">Trip in progress</div>
+              <div id="gps-elapsed" style="font-size:12px;color:var(--text3);">0:00</div>
+            </div>
+          </div>
+          <button onclick="stopGPSTrip()" style="padding:10px 18px;border-radius:20px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">Stop & Save</button>
+        </div>
+        <div id="gps-status" style="font-size:12px;color:var(--text3);">Acquiring GPS...</div>
+      </div>
       <div id="mile-list"></div>
       <div class="empty" id="mile-empty" style="display:none">
         <div class="empty-ico">🚗</div>
@@ -988,7 +1017,7 @@ const CATS=[
 let receipts=[], mileage=[], bin=[], selCat='other', editCat='other';
 let imgData=null, editImgData=null, editId=null, editMileId=null;
 let stream=null, facing='environment', camTarget='add';
-let curFilter='all', selPeriodIdx=0;
+let curFilter='all', selPeriodIdx=0, curSearch='';
 
 // Settings
 let settings={bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37};
@@ -1369,6 +1398,8 @@ function goTab(t){
   });
   // Summary cards always visible
   document.getElementById('scroller').scrollTop=0;
+  // Clear search when switching tabs
+  if(t!=='list'){curSearch='';const el=document.getElementById('receipt-search');if(el)el.value='';}
   if(t==='add'){
     const today=new Date().toISOString().split('T')[0];
     const dateEl=document.getElementById('f-date');
@@ -1998,6 +2029,14 @@ function saveReceipt(){
   const amount=parseFloat(document.getElementById('f-amount').value);
   const date=document.getElementById('f-date').value;
   if(!vendor||isNaN(amount)||amount<=0||!date){alert('Please enter vendor, amount, and date.');return;}
+
+  // Duplicate detection
+  const dupe=checkDuplicate(vendor,amount,date);
+  if(dupe){
+    const dupeDate=fmtDate(dupe.date);
+    const proceed=confirm(`⚠️ Possible duplicate\n\nA receipt from ${vendor} for $${amount.toFixed(2)} already exists (${dupeDate}).\n\nSave anyway?`);
+    if(!proceed) return;
+  }
   const id=Date.now();
   receipts.unshift({
     id,vendor,amount,date,
@@ -2162,9 +2201,32 @@ function renderList(){
     const c=id==='all'?{icon:'◉',label:'All'}:catBy(id);
     return `<button class="f-pill${curFilter===id?' on':''}" onclick="setFilter('${id}')">${c.icon} ${id==='all'?'All':c.label}</button>`;
   }).join('');
-  const filtered=curFilter==='all'?receipts:receipts.filter(r=>r.category===curFilter);
+  // Apply category filter then search filter
+  let filtered=curFilter==='all'?receipts:receipts.filter(r=>r.category===curFilter);
+  if(curSearch){
+    const q=curSearch.toLowerCase();
+    filtered=filtered.filter(r=>
+      (r.vendor||'').toLowerCase().includes(q)||
+      (r.notes||'').toLowerCase().includes(q)||
+      (r.invoice||'').toLowerCase().includes(q)||
+      (r.suppgst||'').toLowerCase().includes(q)||
+      String(r.amount).includes(q)||
+      fmtDate(r.date).toLowerCase().includes(q)
+    );
+  }
   const list=document.getElementById('r-list'),empty=document.getElementById('r-empty');
-  if(!filtered.length){list.innerHTML='';empty.style.display='block';return;}
+  if(!filtered.length){
+    list.innerHTML='';
+    empty.style.display='block';
+    if(curSearch){
+      document.querySelector('#r-empty .empty-title').textContent='No results';
+      document.querySelector('#r-empty .empty-sub').textContent=`No receipts matching "${curSearch}"`;
+    } else {
+      document.querySelector('#r-empty .empty-title').textContent='No receipts yet';
+      document.querySelector('#r-empty .empty-sub').textContent='Tap + Receipt to photograph or upload your first receipt.';
+    }
+    return;
+  }
   empty.style.display='none';
   list.innerHTML=filtered.map(r=>{
     const c=catBy(r.category);
@@ -2205,6 +2267,36 @@ function renderList(){
   }).join('');
 }
 function setFilter(id){curFilter=id;renderList();}
+
+function onSearchInput(){
+  const el=document.getElementById('receipt-search');
+  const clearBtn=document.getElementById('search-clear');
+  curSearch=el.value.trim();
+  if(clearBtn) clearBtn.style.display=curSearch?'flex':'none';
+  renderList();
+}
+
+function clearSearch(){
+  const el=document.getElementById('receipt-search');
+  if(el) el.value='';
+  curSearch='';
+  const clearBtn=document.getElementById('search-clear');
+  if(clearBtn) clearBtn.style.display='none';
+  renderList();
+}
+
+/* ── DUPLICATE DETECTION ── */
+function checkDuplicate(vendor, amount, date){
+  // Look for receipts with same vendor (case-insensitive), same amount, within 2 days
+  const d=new Date(date+'T12:00:00');
+  return receipts.find(r=>{
+    if(r.vendor.toLowerCase()!==vendor.toLowerCase()) return false;
+    if(Math.abs(r.amount-amount)>0.01) return false;
+    const rd=new Date(r.date+'T12:00:00');
+    const diffDays=Math.abs((d-rd)/(1000*60*60*24));
+    return diffDays<=2;
+  });
+}
 
 /* ── MILEAGE ── */
 function calcMileValue(km, cumulativeKmBefore){
@@ -2256,6 +2348,137 @@ function renderMileage(){
     </div>`;
   }).join('');
 }
+
+/* ── GPS TRIP TRACKING ── */
+let gpsTrip={active:false, startCoords:null, startTime:null, startAddress:'', watchId:null, elapsedTimer:null, currentCoords:null};
+
+function haversineKm(lat1,lon1,lat2,lon2){
+  const R=6371;
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// Get actual road distance using OSRM (free, no API key, OpenStreetMap routing)
+async function getRoadDistanceKm(lat1,lon1,lat2,lon2){
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+    const r=await fetch(url);
+    const d=await r.json();
+    if(d.code==='Ok'&&d.routes&&d.routes[0]){
+      return parseFloat((d.routes[0].distance/1000).toFixed(1)); // metres → km
+    }
+  }catch(e){console.warn('OSRM routing failed, falling back to haversine:',e);}
+  // Fallback: haversine × 1.3 road factor
+  return parseFloat((haversineKm(lat1,lon1,lat2,lon2)*1.3).toFixed(1));
+}
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+    const d=await r.json();
+    // Build a short address from suburb + city
+    const p=d.address||{};
+    return [p.suburb||p.neighbourhood||p.village||p.town||p.city_district,p.city||p.town||p.county].filter(Boolean).join(', ')||d.display_name.split(',').slice(0,2).join(',').trim();
+  }catch(e){return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;}
+}
+
+async function startGPSTrip(){
+  if(!navigator.geolocation){showToast('GPS not available on this device');return;}
+  if(gpsTrip.active){showToast('Trip already in progress');return;}
+
+  showToast('Getting your location...');
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    gpsTrip.active=true;
+    gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+    gpsTrip.currentCoords={...gpsTrip.startCoords};
+    gpsTrip.startTime=Date.now();
+    gpsTrip.startAddress=await reverseGeocode(pos.coords.latitude,pos.coords.longitude);
+
+    // Show active banner
+    document.getElementById('gps-active-banner').style.display='block';
+    document.getElementById('gps-track-btn').style.display='none';
+    document.getElementById('gps-status').textContent='From: '+gpsTrip.startAddress;
+
+    // Update elapsed timer
+    gpsTrip.elapsedTimer=setInterval(()=>{
+      const s=Math.floor((Date.now()-gpsTrip.startTime)/1000);
+      const m=Math.floor(s/60),sec=s%60;
+      const el=document.getElementById('gps-elapsed');
+      if(el) el.textContent=m+':'+(sec<10?'0':'')+sec;
+    },1000);
+
+    // Watch position for live distance updates (throttled - only recalculate every ~30 seconds)
+    let lastRouteUpdate=0;
+    gpsTrip.watchId=navigator.geolocation.watchPosition(async p=>{
+      gpsTrip.currentCoords={lat:p.coords.latitude,lon:p.coords.longitude};
+      const now=Date.now();
+      const statusEl=document.getElementById('gps-status');
+      // Update estimate immediately with haversine, then get real route every 30s
+      const straightKm=haversineKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,p.coords.latitude,p.coords.longitude);
+      const approxKm=(straightKm*1.3).toFixed(1);
+      if(statusEl) statusEl.textContent=`From: ${gpsTrip.startAddress} · ~${approxKm} km`;
+      if(now-lastRouteUpdate>30000){
+        lastRouteUpdate=now;
+        const roadKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,p.coords.latitude,p.coords.longitude);
+        if(statusEl&&gpsTrip.active) statusEl.textContent=`From: ${gpsTrip.startAddress} · ${roadKm} km (road)`;
+      }
+    },{enableHighAccuracy:true,maximumAge:10000,timeout:30000});
+
+  }, err=>{
+    showToast('Could not get location — check GPS permissions');
+    console.warn('GPS error:',err);
+  },{enableHighAccuracy:true,timeout:15000});
+}
+
+async function stopGPSTrip(){
+  if(!gpsTrip.active) return;
+
+  // Stop watchers
+  if(gpsTrip.watchId!=null) navigator.geolocation.clearWatch(gpsTrip.watchId);
+  if(gpsTrip.elapsedTimer) clearInterval(gpsTrip.elapsedTimer);
+
+  const endCoords=gpsTrip.currentCoords||gpsTrip.startCoords;
+  // Get actual road distance via OSRM routing
+  const statusEl=document.getElementById('gps-status');
+  if(statusEl) statusEl.textContent='Calculating route...';
+  const roadKm=await getRoadDistanceKm(
+    gpsTrip.startCoords.lat, gpsTrip.startCoords.lon,
+    endCoords.lat, endCoords.lon
+  );
+  const endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
+  const date=new Date().toISOString().split('T')[0];
+
+  // Hide banner
+  document.getElementById('gps-active-banner').style.display='none';
+  document.getElementById('gps-track-btn').style.display='block';
+
+  const startAddr=gpsTrip.startAddress;
+
+  // Reset state
+  gpsTrip={active:false,startCoords:null,startTime:null,startAddress:'',watchId:null,elapsedTimer:null,currentCoords:null};
+
+  // Open mile modal pre-filled
+  editMileId=null;
+  document.getElementById('mile-modal-title').textContent='Add Trip';
+  document.getElementById('m-date').value=date;
+  document.getElementById('m-from').value=startAddr||'';
+  document.getElementById('m-to').value=endAddress;
+  document.getElementById('m-km').value=roadKm>0?roadKm:'';
+  document.getElementById('m-odo-start').value='';
+  document.getElementById('m-odo-end').value='';
+  document.getElementById('m-purpose').value='';
+  document.getElementById('mile-del-btn').style.display='none';
+
+  // Need to set the from address before state was reset
+  document.getElementById('m-from').value=startAddr||endAddress;
+
+  document.getElementById('mile-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-mile').classList.add('open'),10);
+  showToast(`Trip recorded: ~${roadKm} km`);
+}
+
 
 function openMileModal(id){
   try{
