@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Receipts">
@@ -329,6 +332,12 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
   <div class="scroller" id="scroller">
 
+    <!-- OVERVIEW PANEL -->
+    <div id="p-overview" style="display:none">
+      <div id="overview-content"></div>
+      <div class="pb"></div>
+    </div>
+
     <!-- ADD PANEL -->
     <div id="p-add" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0;">
@@ -601,7 +610,8 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
   </div><!-- scroller -->
 
   <nav class="tabbar">
-    <button class="tab on" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
+    <button class="tab on" id="t-overview" onclick="goTab('overview')"><span class="tab-ico">🏠</span><span class="tab-lbl">Overview</span></button>
+    <button class="tab" id="t-list" onclick="goTab('list')"><span class="tab-ico">📋</span><span class="tab-lbl">Receipts</span></button>
     <button class="tab" id="t-mile" onclick="goTab('mile')"><span class="tab-ico">🚗</span><span class="tab-lbl">Mileage</span></button>
     <button class="tab" id="t-gst" onclick="goTab('gst')"><span class="tab-ico">📊</span><span class="tab-lbl">GST</span></button>
   </nav>
@@ -824,9 +834,9 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         <div class="g-icon" style="background:rgba(175,82,222,.1)">📆</div>
         <span class="g-lbl">GST period</span>
         <select class="g-select" id="s-gstperiod">
-          <option value="2">2-monthly (standard)</option>
-          <option value="1">1-monthly</option>
-          <option value="6">6-monthly</option>
+          <option value="1">1-monthly — turnover &gt; $24M</option>
+          <option value="2">2-monthly — standard (most common)</option>
+          <option value="6">6-monthly — turnover &lt; $500K</option>
         </select>
       </div>
       <div class="g-row">
@@ -1005,7 +1015,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 <script>
 /* ── DATA ── */
 const CATS=[
-  {id:'meals',       label:'Meals & Ent.',    icon:'☕',color:'#FF9500',entertainment:true},
+  {id:'meals',       label:'Meals & Ent.',    icon:'☕',color:'#FF2D78',entertainment:true},
   {id:'motor',       label:'Motor vehicle',   icon:'🚗',color:'#007AFF',entertainment:false},
   {id:'travel',      label:'Travel & accom.', icon:'✈️',color:'#5AC8FA',entertainment:false},
   {id:'phone',       label:'Phone & internet',icon:'📱',color:'#34C759',entertainment:false},
@@ -1199,7 +1209,26 @@ function getFY(){
   const n=new Date(),m=n.getMonth()+1,y=n.getFullYear(),sy=m<4?y-1:y;
   return{start:new Date(sy,3,1),end:new Date(sy+1,2,31),label:`FY ${sy}–${String(sy+1).slice(2)}`,range:`1 Apr ${sy} – 31 Mar ${sy+1}`,startYear:sy};
 }
+function getFYForYear(sy){
+  return{start:new Date(sy,3,1),end:new Date(sy+1,2,31),label:`FY ${sy}–${String(sy+1).slice(2)}`,range:`1 Apr ${sy} – 31 Mar ${sy+1}`,startYear:sy};
+}
+function getAvailableFYs(){
+  const currentFY=getFY();
+  const years=new Set([currentFY.startYear]);
+  receipts.forEach(function(r){
+    const d=new Date(r.date+'T12:00:00');
+    const m=d.getMonth()+1,y=d.getFullYear();
+    years.add(m<4?y-1:y);
+  });
+  mileage.forEach(function(m){
+    const d=new Date(m.date+'T12:00:00');
+    const mo=d.getMonth()+1,y=d.getFullYear();
+    years.add(mo<4?y-1:y);
+  });
+  return Array.from(years).sort(function(a,b){return b-a;}).map(getFYForYear);
+}
 const FY=getFY();
+var selectedFYYear=FY.startYear;
 
 /* ── GST PERIODS ── */
 function buildGSTPeriods(){
@@ -1253,9 +1282,16 @@ function updateStats(){
     const claimable=fyR.reduce((s,r)=>s+claimableForReceipt(r),0);
     const gst=fyR.reduce((s,r)=>s+gstForReceipt(r),0);
     const recon=fyR.filter(r=>r.reconciled).length;
-    document.getElementById('s-total').textContent='$'+claimable.toFixed(2);
+    // Include mileage in claimable total
+    const fyM=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+    let cumKm=0;
+    const mileVal=fyM.slice().sort((a,b)=>a.date.localeCompare(b.date)).reduce((s,m)=>{const v=calcMileValue(m.km,cumKm);cumKm+=m.km;return s+v;},0);
+    document.getElementById('s-total').textContent='$'+(claimable+mileVal).toFixed(2);
     document.getElementById('s-gst').textContent='$'+gst.toFixed(2);
     document.getElementById('s-recon').textContent=recon+'/'+fyR.length;
+    // Refresh overview if visible
+    const ov=document.getElementById('p-overview');
+    if(ov&&ov.style.display!=='none') renderOverview();
   }catch(e){console.error('updateStats error:',e);}
 }
 
@@ -1390,23 +1426,288 @@ function updateEntWarn(warnId,catId){
   document.getElementById(warnId).style.display=(cat&&cat.entertainment)?'flex':'none';
 }
 
-/* ── TABS ── */
+/* ── OVERVIEW ── */
+function setOverviewFY(yr){
+  selectedFYYear=parseInt(yr);
+  renderOverview();
+}
+
+function renderOverview(){
+  var el=document.getElementById('overview-content');
+  if(!el) return;
+
+  var selFY=getFYForYear(selectedFYYear);
+  var availFYs=getAvailableFYs();
+
+  var fyR=receipts.filter(function(r){var d=new Date(r.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;});
+  var totalSpend=fyR.reduce(function(s,r){return s+r.amount;},0);
+  var totalClaimable=fyR.reduce(function(s,r){return s+claimableForReceipt(r);},0);
+  var totalGST=fyR.reduce(function(s,r){return s+gstForReceipt(r);},0);
+  var recon=fyR.filter(function(r){return r.reconciled;}).length;
+  var reconPct=fyR.length?Math.round(recon/fyR.length*100):0;
+
+  // Mileage
+  var fyM=mileage.filter(function(m){var d=new Date(m.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;});
+  var totalKm=fyM.reduce(function(s,m){return s+m.km;},0);
+  var cumKm=0;
+  var mileVal=fyM.slice().sort(function(a,b){return a.date.localeCompare(b.date);}).reduce(function(s,m){var v=calcMileValue(m.km,cumKm);cumKm+=m.km;return s+v;},0);
+
+  // Category breakdown for donut — include mileage as its own slice
+  var catTotals={};
+  fyR.forEach(function(r){catTotals[r.category]=(catTotals[r.category]||0)+claimableForReceipt(r);});
+  if(mileVal>0) catTotals['_mileage']=mileVal;
+  var topCats=Object.entries(catTotals).sort(function(a,b){return b[1]-a[1];});
+  var totalWithMileage=totalClaimable+mileVal;
+
+  // Monthly spending — all 12 months of selected FY (Apr–Mar), always show all
+  var months=[];
+  var now=new Date();
+  var cur=new Date(selFY.start.getFullYear(),selFY.start.getMonth(),1);
+  while(cur<new Date(selFY.end.getFullYear(),selFY.end.getMonth()+1,1)){
+    var mEnd=new Date(cur.getFullYear(),cur.getMonth()+1,0);
+    var mName=cur.toLocaleDateString('en-NZ',{month:'short'});
+    var isFuture=cur>now;
+    var mSpend=receipts.filter(function(r){
+      var d=new Date(r.date+'T12:00:00');
+      return d>=cur&&d<=mEnd;
+    }).reduce(function(s,r){return s+claimableForReceipt(r);},0);
+    var mGST=receipts.filter(function(r){
+      var d=new Date(r.date+'T12:00:00');
+      return d>=cur&&d<=mEnd;
+    }).reduce(function(s,r){return s+gstForReceipt(r);},0);
+    months.push({name:mName,spend:mSpend,gst:mGST,date:new Date(cur),future:isFuture});
+    cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+  }
+  var maxMonth=Math.max.apply(null,months.map(function(m){return m.spend;}));
+  if(!maxMonth) maxMonth=1;
+
+  // GST next filing
+  var periods=buildGSTPeriods();
+  var todayD=new Date();
+  var nextPeriod=selFY.startYear===getFY().startYear?periods.find(function(p){return p.end>=todayD;}):null;
+  var daysUntilDue=0;
+  var nextDueLabel='';
+  if(nextPeriod){
+    var due=new Date(nextPeriod.end.getFullYear(),nextPeriod.end.getMonth()+1,28);
+    daysUntilDue=Math.ceil((due-todayD)/(1000*60*60*24));
+    nextDueLabel=due.toLocaleDateString('en-NZ',{day:'numeric',month:'long'});
+  }
+
+  el.innerHTML=
+    '<div style="padding:16px 16px 0;">' +
+
+      // Capture section — same as add panel
+      '<div style="background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:12px;">' +
+        '<div style="padding:11px 14px;background:linear-gradient(135deg,#30D158,#25A244);display:flex;align-items:center;justify-content:space-between;">' +
+          '<span style="font-size:13px;font-weight:700;letter-spacing:-0.2px;color:white;">New Expense</span>' +
+
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;">' +
+          '<button class="cap-btn" onclick="overviewCapture(\'camera\')">' +
+            '<div class="cap-btn-ico" style="background:rgba(0,122,255,.1)">📷</div>' +
+            '<div class="cap-btn-name">Camera</div>' +
+            '<div class="cap-btn-sub">Take photo</div>' +
+          '</button>' +
+          '<button class="cap-btn" onclick="overviewCapture(\'photo\')">' +
+            '<input type="file" id="ov-file-in" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" onchange="overviewFileChosen(event)" style="display:none">' +
+            '<div class="cap-btn-ico" style="background:rgba(52,199,89,.1)">🖼️</div>' +
+            '<div class="cap-btn-name">Photo</div>' +
+            '<div class="cap-btn-sub">From library</div>' +
+          '</button>' +
+          '<button class="cap-btn" onclick="overviewCapture(\'pdf\')">' +
+            '<input type="file" id="ov-pdf-in" accept="application/pdf,.pdf" onchange="overviewPDFChosen(event)" style="display:none">' +
+            '<div class="cap-btn-ico" style="background:rgba(255,59,48,.1)">📄</div>' +
+            '<div class="cap-btn-name">PDF</div>' +
+            '<div class="cap-btn-sub">Invoice / doc</div>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+
+      // 1. Donut chart — top
+      (topCats.length && totalWithMileage > 0 ?
+        '<div style="background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:10px;">' +
+        '<div style="background:linear-gradient(135deg,#30D158,#25A244);border-radius:16px 16px 0 0;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;">' +
+            '<div style="font-size:13px;font-weight:700;color:white;letter-spacing:-0.2px;">Business expenses</div>' +
+            '<select onchange="setOverviewFY(this.value)" style="font-size:11px;font-weight:600;color:white;background:rgba(255,255,255,.2);border:none;border-radius:7px;padding:3px 7px;font-family:inherit;cursor:pointer;outline:none;">' +
+              availFYs.map(function(fy){return '<option value="'+fy.startYear+'"'+(fy.startYear===selectedFYYear?' selected':'')+' style="color:black;background:white;">'+fy.label+'</option>';}).join('') +
+            '</select>' +
+          '</div>' +
+          '<div style="padding:16px;">' +
+          buildDonutChart(topCats, totalWithMileage) +
+          '</div>' +
+        '</div>'
+      :
+        '<div style="background:var(--surface);border-radius:16px;padding:24px 16px;margin-bottom:10px;text-align:center;">' +
+          '<div style="font-size:36px;margin-bottom:8px;">🧾</div>' +
+          '<div style="font-weight:600;font-size:15px;">No receipts yet</div>' +
+          '<div style="font-size:13px;color:var(--text3);margin-top:4px;">Add receipts to see your expense breakdown</div>' +
+        '</div>'
+      ) +
+
+      // 2. GST back box
+      '<div style="background:linear-gradient(135deg,#FF9500,#FF6B00);border-radius:16px;padding:18px 20px;margin-bottom:10px;">' +
+        '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">GST back this year</div>' +
+        '<div style="font-size:36px;font-weight:800;color:white;letter-spacing:-1px;margin-bottom:2px;">$'+totalGST.toFixed(2)+'</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,.7);">Claimable input tax · '+fyR.filter(function(r){return r.gst!=='no';}).length+' GST receipts</div>' +
+        (nextPeriod?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2);display:flex;justify-content:space-between;align-items:center;">' +
+          '<div>' +
+            '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">Next return due</div>' +
+            '<div style="font-size:17px;font-weight:700;color:white;letter-spacing:-0.3px;">'+nextDueLabel+'</div>' +
+          '</div>' +
+          '<div style="background:rgba(0,0,0,.25);border-radius:14px;padding:8px 14px;text-align:center;min-width:56px;">' +
+            '<div style="font-size:22px;font-weight:800;color:white;line-height:1;letter-spacing:-0.5px;">'+(daysUntilDue>0?daysUntilDue:'0')+'</div>' +
+            '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.65);letter-spacing:0.5px;">'+(daysUntilDue===1?'DAY':'DAYS')+'</div>' +
+          '</div>' +
+        '</div>':'') +
+      '</div>' +
+
+      // 3. Reconciliation full width
+      '<div style="background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--text2);">Reconciled</div>' +
+            '<div style="font-size:12px;color:var(--text3);">'+recon+' of '+fyR.length+' receipts matched to bank</div>' +
+          '</div>' +
+          '<div style="font-size:24px;font-weight:700;color:'+(reconPct===100?'var(--accent-dark)':'var(--text1)')+';">'+reconPct+'%</div>' +
+        '</div>' +
+        '<div style="height:6px;background:var(--fill2);border-radius:3px;overflow:hidden;">' +
+          '<div style="height:100%;width:'+reconPct+'%;background:'+(reconPct===100?'var(--accent)':'#FF9500')+';border-radius:3px;transition:width .4s;"></div>' +
+        '</div>' +
+      '</div>' +
+
+      // 4. Monthly bar chart — full FY Apr–Mar
+      '<div style="background:var(--surface);border-radius:14px;padding:14px 16px 12px;margin-bottom:10px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text2);">Monthly claimed</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<div style="display:flex;align-items:center;gap:4px;"><div style="width:8px;height:8px;border-radius:2px;background:#1a7a35;"></div><span style="font-size:10px;color:var(--text3);">Claimable</span></div>' +
+            '<div style="display:flex;align-items:center;gap:4px;"><div style="width:8px;height:8px;border-radius:2px;background:#FF9500;"></div><span style="font-size:10px;color:var(--text3);">GST back</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:flex-end;gap:4px;height:116px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;">' +
+          months.map(function(m){
+            var h=Math.max(2,Math.round(m.spend/maxMonth*72));
+            var hGST=m.spend>0?Math.max(2,Math.round(m.gst/m.spend*h)):0;
+            var isNow=m.date.getMonth()===now.getMonth()&&m.date.getFullYear()===now.getFullYear();
+            var claimColor=m.future?'rgba(26,122,53,.12)':(isNow?'#1a7a35':'rgba(26,122,53,.35)');
+            var gstColor=m.future?'rgba(255,149,0,.12)':(isNow?'#FF9500':'rgba(255,149,0,.5)');
+            var labelColor=m.future?'var(--fill3)':(isNow?'#1a7a35':'var(--text3)');
+            return '<div style="min-width:26px;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">' +
+              '<div style="font-size:8px;color:'+(m.future?'var(--text3)':isNow?'#1a7a35':'var(--text3)')+';font-weight:600;white-space:nowrap;">'+(m.spend>0?'$'+Math.round(m.spend):'')+'</div>' +
+              '<div style="display:flex;align-items:flex-end;gap:1px;">' +
+                '<div style="width:8px;height:'+h+'px;background:'+claimColor+';border-radius:2px 2px 0 0;"></div>' +
+                '<div style="width:6px;height:'+hGST+'px;background:'+gstColor+';border-radius:2px 2px 0 0;"></div>' +
+              '</div>' +
+              '<div style="font-size:7px;color:'+(m.future?'rgba(180,90,0,.2)':'#cc6a00')+';font-weight:600;white-space:nowrap;">'+(m.gst>0?'$'+Math.round(m.gst):'')+'</div>' +
+              '<div style="font-size:9px;color:'+labelColor+';font-weight:'+(isNow?'700':'400')+';">'+m.name+'</div>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+
+    '</div>';
+}
+
+function buildDonutChart(catPairs, total){
+  var size=280, cx=140, cy=140, outerR=116, innerR=100;
+  var startAngle=-Math.PI/2; // start at top
+  var slices='';
+  var legend='';
+  var otherTotal=0;
+  var otherCount=0;
+
+  // Group small slices into "Other"
+  var mainCats=[];
+  catPairs.forEach(function(pair){
+    var pct=pair[1]/total;
+    if(pair[0]==='_mileage'||pct>=0.04) mainCats.push(pair);
+    else { otherTotal+=pair[1]; otherCount++; }
+  });
+  if(otherTotal>0) mainCats.push(['_other',otherTotal]);
+
+  mainCats.forEach(function(pair, i){
+    var cat=pair[0]==='_other'?{label:'Other',icon:'📁',color:'#8E8E93'}:
+             pair[0]==='_mileage'?{label:'Mileage',icon:'🚗',color:'#5856D6'}:
+             catBy(pair[0]);
+    var pct=pair[1]/total;
+    var angle=pct*Math.PI*2;
+    var endAngle=startAngle+angle;
+
+    // SVG arc path
+    var x1=cx+outerR*Math.cos(startAngle);
+    var y1=cy+outerR*Math.sin(startAngle);
+    var x2=cx+outerR*Math.cos(endAngle);
+    var y2=cy+outerR*Math.sin(endAngle);
+    var ix1=cx+innerR*Math.cos(endAngle);
+    var iy1=cy+innerR*Math.sin(endAngle);
+    var ix2=cx+innerR*Math.cos(startAngle);
+    var iy2=cy+innerR*Math.sin(startAngle);
+    var large=angle>Math.PI?1:0;
+
+    slices+='<path d="M'+x1+','+y1+' A'+outerR+','+outerR+' 0 '+large+',1 '+x2+','+y2+
+      ' L'+ix1+','+iy1+' A'+innerR+','+innerR+' 0 '+large+',0 '+ix2+','+iy2+' Z" '+
+      'fill="'+cat.color+'" stroke="var(--surface)" stroke-width="2"/>';
+
+    var pctLabel=Math.round(pct*100);
+    legend+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--sep-l);">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<div style="width:8px;height:8px;border-radius:2px;background:'+cat.color+';flex-shrink:0;"></div>'+
+        '<span style="font-size:13px;color:var(--text1);letter-spacing:-0.1px;">'+cat.icon+' '+cat.label+'</span>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<span style="font-size:11px;color:var(--text3);">'+pctLabel+'%</span>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text1);letter-spacing:-0.3px;">$'+pair[1].toFixed(2)+'</span>'+
+      '</div>'+
+    '</div>';
+
+    startAngle=endAngle;
+  });
+
+  // Centre label
+  var centreLabel=
+    '<text x="'+cx+'" y="'+cy+'" dy="-13" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#555555" font-family="\'Inter\',sans-serif" font-weight="600" letter-spacing="3">CLAIMABLE</text>'+
+    '<text x="'+cx+'" y="'+cy+'" dy="11" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" fill="#111111" font-family="\'Inter\',sans-serif" letter-spacing="-0.5">$'+total.toFixed(2)+'</text>';
+
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;">'+
+    '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+slices+centreLabel+'</svg>'+
+    '<div style="width:100%;">'+legend+'</div>'+
+  '</div>';
+}
+
+function statCard(label,val,icon,bg,color){
+  return '<div style="background:'+bg+';border-radius:14px;padding:14px 14px 12px;">' +
+    '<div style="font-size:22px;margin-bottom:4px;">'+icon+'</div>' +
+    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">'+label+'</div>' +
+    '<div style="font-size:20px;font-weight:700;color:'+color+';letter-spacing:-0.5px;">'+val+'</div>' +
+  '</div>';
+}
+
+function miniStat(val,label,icon){
+  return '<div style="background:var(--surface);border-radius:12px;padding:10px 12px;text-align:center;">' +
+    '<div style="font-size:16px;">'+icon+'</div>' +
+    '<div style="font-size:14px;font-weight:700;color:var(--text1);">'+val+'</div>' +
+    '<div style="font-size:10px;color:var(--text3);">'+label+'</div>' +
+  '</div>';
+}
+
+
 function goTab(t){
-  ['add','list','mile','gst'].forEach(n=>{
-    const panel=document.getElementById('p-'+n);
-    const tabBtn=document.getElementById('t-'+n);
+  ['overview','add','list','mile','gst'].forEach(function(n){
+    var panel=document.getElementById('p-'+n);
+    var tabBtn=document.getElementById('t-'+n);
     if(panel) panel.style.display=n===t?'block':'none';
     if(tabBtn) tabBtn.classList.toggle('on',n===t);
   });
-  // Summary cards always visible
   document.getElementById('scroller').scrollTop=0;
-  // Clear search when switching tabs
-  if(t!=='list'){curSearch='';const el=document.getElementById('receipt-search');if(el)el.value='';}
+  if(t!=='list'){curSearch='';var el=document.getElementById('receipt-search');if(el)el.value='';}
   if(t==='add'){
-    const today=new Date().toISOString().split('T')[0];
-    const dateEl=document.getElementById('f-date');
+    var today=new Date().toISOString().split('T')[0];
+    var dateEl=document.getElementById('f-date');
     if(dateEl&&!dateEl.value)dateEl.value=today;
   }
+  if(t==='overview') document.getElementById('sum-row').style.display='none';
+  else document.getElementById('sum-row').style.display='';
+  if(t==='overview')renderOverview();
   if(t==='list')renderList();
   if(t==='mile')renderMileage();
   if(t==='gst')renderGST();
@@ -2383,6 +2684,37 @@ async function reverseGeocode(lat,lon){
     var p=d.address||{};
     return [p.suburb||p.neighbourhood||p.village||p.town||p.city_district,p.city||p.town||p.county].filter(Boolean).join(', ')||d.display_name.split(',').slice(0,2).join(',').trim();
   }catch(e){return lat.toFixed(4)+', '+lon.toFixed(4);}
+}
+
+function addReceiptFromOverview(){
+  goTab('add');
+  setTimeout(function(){ openCamOrFile(); }, 150);
+}
+
+function overviewCapture(type){
+  if(type==='camera'){
+    goTab('add');
+    setTimeout(function(){
+      var hasCamera=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
+      var isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if(hasCamera&&isMobile){ openCam(); }
+      else { document.getElementById('cam-file-in').click(); }
+    },150);
+  } else if(type==='photo'){
+    document.getElementById('ov-file-in').click();
+  } else if(type==='pdf'){
+    document.getElementById('ov-pdf-in').click();
+  }
+}
+
+function overviewFileChosen(e){
+  goTab('add');
+  setTimeout(function(){ onFile(e); },150);
+}
+
+function overviewPDFChosen(e){
+  goTab('add');
+  setTimeout(function(){ onPDF(e); },150);
 }
 
 function startGPSTrip(){
@@ -3395,7 +3727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Build category pills
   buildCats('cat-scroll', selCat, 'pickCat', true);
   updateStats();
-  renderList();
+  goTab('overview');
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
   // Add Enter key support for login fields
@@ -3404,8 +3736,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   });
   // Auto-load from server on startup if logged in
-  if(isLoggedIn()) await loadFromServer();
-  else showLoginScreen();
+  // Skip login when previewing in Claude (no server available)
+  const isPreview = window.location.hostname === 'claude.ai' || 
+                    window.location.hostname.includes('artifacts') ||
+                    window.location.protocol === 'blob:' ||
+                    window.location.hostname === '';
+  if(isPreview){
+    // Demo mode - show app without login
+    localStorage.setItem('nzrt_username','demo');
+    localStorage.setItem('nzrt_role','admin');
+  } else if(isLoggedIn()){
+    await loadFromServer();
+  } else {
+    showLoginScreen();
+  }
 });
 </script>
 </body>
