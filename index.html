@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="app-version" content="2.1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -531,20 +535,26 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
       <div style="display:flex;gap:8px;margin:0 16px 12px;">
         <button class="save-btn" style="background:var(--blue);flex:1;margin:0;" onclick="openMileModal(null)">+ Log a trip</button>
-        <button id="gps-track-btn" class="save-btn" style="flex:1;margin:0;background:rgba(52,199,89,.15);color:var(--accent-dark);border:1.5px solid rgba(52,199,89,.3);" onclick="startGPSTrip()">📍 Track Trip</button>
+        <button id="gps-track-btn" class="save-btn" style="flex:1;margin:0;background:rgba(52,199,89,.15);color:var(--accent-dark);border:1.5px solid rgba(52,199,89,.3);" onclick="gpsStartSnapshot()">📍 Start Trip</button>
       </div>
+
+      <!-- GPS: waiting for end snapshot -->
       <div id="gps-active-banner" style="display:none;margin:0 16px 12px;background:rgba(52,199,89,.12);border:1.5px solid rgba(52,199,89,.4);border-radius:14px;padding:14px 16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">🟢</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px;">🟢</span>
             <div>
-              <div style="font-weight:700;font-size:15px;color:var(--accent-dark);">Trip in progress</div>
-              <div id="gps-elapsed" style="font-size:12px;color:var(--text3);">0:00</div>
+              <div style="font-weight:700;font-size:15px;color:var(--accent-dark);">Trip started</div>
+              <div id="gps-from-label" style="font-size:12px;color:var(--text3);">Getting location...</div>
             </div>
           </div>
-          <button onclick="stopGPSTrip()" style="padding:10px 18px;border-radius:20px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">Stop &amp; Save</button>
+          <button onclick="gpsCancelTrip()" style="padding:6px 12px;border-radius:20px;border:1.5px solid rgba(255,59,48,.3);background:rgba(255,59,48,.08);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--red);">Cancel</button>
         </div>
-        <div id="gps-status" style="font-size:12px;color:var(--text3);">Acquiring GPS...</div>
+        <div style="background:rgba(52,199,89,.15);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--text2);margin-bottom:10px;">
+          📱 You can now minimise the app and drive.<br>
+          <strong>Tap "I've Arrived" when you reach your destination.</strong>
+        </div>
+        <button onclick="gpsEndSnapshot()" style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">📍 I've Arrived</button>
       </div>
       <div id="mile-list"></div>
       <div class="empty" id="mile-empty" style="display:none">
@@ -1013,6 +1023,26 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
 
 <script>
+/* ── VERSION CHECK ── */
+var APP_VERSION='2.1.0';
+(function(){
+  try{
+    var isStandalone=window.navigator.standalone||window.matchMedia('(display-mode: standalone)').matches;
+    if(!isStandalone) return;
+    fetch(window.location.href+'?v='+Date.now(),{cache:'no-store'})
+      .then(function(r){return r.text();})
+      .then(function(html){
+        try{
+          var m=html.match(/name="app-version" content="([^"]+)"/);
+          if(m&&m[1]&&m[1]!==APP_VERSION){
+            console.log('New version, reloading...');
+            window.location.reload(true);
+          }
+        }catch(e){}
+      }).catch(function(){});
+  }catch(e){}
+})();
+
 /* ── DATA ── */
 const CATS=[
   {id:'meals',       label:'Meals & Ent.',    icon:'☕',color:'#FF2D78',entertainment:true},
@@ -1696,7 +1726,7 @@ function goTab(t){
   else document.getElementById('sum-row').style.display='';
   if(t==='overview')renderOverview();
   if(t==='list')renderList();
-  if(t==='mile')renderMileage();
+  if(t==='mile'){renderMileage();gpsRestoreTrip();}
   if(t==='gst')renderGST();
 }
 
@@ -2643,8 +2673,8 @@ function renderMileage(){
 
 
 
-/* ── GPS TRIP TRACKING ── */
-var gpsTrip={active:false,startCoords:null,startTime:null,startAddress:'',watchId:null,elapsedTimer:null,currentCoords:null};
+/* ── GPS SNAPSHOT TRIP TRACKING ── */
+var gpsTrip={active:false,startCoords:null,startAddress:''};
 
 function haversineKm(lat1,lon1,lat2,lon2){
   var R=6371;
@@ -2660,7 +2690,7 @@ async function getRoadDistanceKm(lat1,lon1,lat2,lon2){
     var r=await fetch(url);
     var d=await r.json();
     if(d.code==='Ok'&&d.routes&&d.routes[0]) return parseFloat((d.routes[0].distance/1000).toFixed(1));
-  }catch(e){console.warn('OSRM fallback to haversine');}
+  }catch(e){console.warn('OSRM fallback');}
   return parseFloat((haversineKm(lat1,lon1,lat2,lon2)*1.3).toFixed(1));
 }
 
@@ -2673,108 +2703,64 @@ async function reverseGeocode(lat,lon){
   }catch(e){return lat.toFixed(4)+', '+lon.toFixed(4);}
 }
 
-function showNewExpenseSheet(){
-  showActionSheet('New Expense', [
-    {label:'📷  Camera', action:"overviewCapture('camera')"},
-    {label:'🖼️  Photo Library', action:"overviewCapture('photo')"},
-    {label:'📄  PDF / Invoice', action:"overviewCapture('pdf')"},
-  ]);
-}
-
-
-function addReceiptFromOverview(){
-  goTab('add');
-  setTimeout(function(){ openCamOrFile(); }, 150);
-}
-
-function overviewCapture(type){
-  if(type==='camera'){
-    goTab('add');
-    setTimeout(function(){
-      var hasCamera=navigator.mediaDevices&&navigator.mediaDevices.getUserMedia;
-      var isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if(hasCamera&&isMobile){ openCam(); }
-      else { document.getElementById('cam-file-in').click(); }
-    },150);
-  } else if(type==='photo'){
-    document.getElementById('ov-file-in').click();
-  } else if(type==='pdf'){
-    document.getElementById('ov-pdf-in').click();
-  }
-}
-
-function overviewFileChosen(e){
-  goTab('add');
-  setTimeout(function(){ onFile(e); },150);
-}
-
-function overviewPDFChosen(e){
-  goTab('add');
-  setTimeout(function(){ onPDF(e); },150);
-}
-
-function startGPSTrip(){
+function gpsStartSnapshot(){
   if(!navigator.geolocation){showToast('GPS not available on this device');return;}
-  if(gpsTrip.active){showToast('Trip already in progress');return;}
-  showToast('Getting your location...');
+  if(gpsTrip.active){showToast('Trip already started');return;}
+  showToast('Getting your start location...');
   navigator.geolocation.getCurrentPosition(function(pos){
-    startGPSTripWithPos(pos);
+    gpsStartSnapshotWithPos(pos);
   },function(err){
     showToast('Could not get location — check GPS permissions');
   },{enableHighAccuracy:true,timeout:15000});
 }
 
-async function startGPSTripWithPos(pos){
+async function gpsStartSnapshotWithPos(pos){
   gpsTrip.active=true;
   gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
-  gpsTrip.currentCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
-  gpsTrip.startTime=Date.now();
   gpsTrip.startAddress=await reverseGeocode(pos.coords.latitude,pos.coords.longitude);
   var banner=document.getElementById('gps-active-banner');
   var trackBtn=document.getElementById('gps-track-btn');
+  var fromLabel=document.getElementById('gps-from-label');
   if(banner) banner.style.display='block';
   if(trackBtn) trackBtn.style.display='none';
-  var statusEl=document.getElementById('gps-status');
-  if(statusEl) statusEl.textContent='From: '+gpsTrip.startAddress;
-  gpsTrip.elapsedTimer=setInterval(function(){
-    var s=Math.floor((Date.now()-gpsTrip.startTime)/1000);
-    var m=Math.floor(s/60),sec=s%60;
-    var el=document.getElementById('gps-elapsed');
-    if(el) el.textContent=m+':'+(sec<10?'0':'')+sec;
-  },1000);
-  var lastRouteUpdate=0;
-  gpsTrip.watchId=navigator.geolocation.watchPosition(function(p){
-    gpsTrip.currentCoords={lat:p.coords.latitude,lon:p.coords.longitude};
-    var now=Date.now();
-    var approxKm=(haversineKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,p.coords.latitude,p.coords.longitude)*1.3).toFixed(1);
-    var s2=document.getElementById('gps-status');
-    if(s2) s2.textContent='From: '+gpsTrip.startAddress+' · ~'+approxKm+' km';
-    if(now-lastRouteUpdate>30000){
-      lastRouteUpdate=now;
-      getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,p.coords.latitude,p.coords.longitude).then(function(roadKm){
-        var s3=document.getElementById('gps-status');
-        if(s3&&gpsTrip.active) s3.textContent='From: '+gpsTrip.startAddress+' · '+roadKm+' km (road)';
-      });
-    }
-  },{enableHighAccuracy:true,maximumAge:10000,timeout:30000});
+  if(fromLabel) fromLabel.textContent='From: '+gpsTrip.startAddress;
+  localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
 }
 
-async function stopGPSTrip(){
-  if(!gpsTrip.active) return;
-  if(gpsTrip.watchId!=null) navigator.geolocation.clearWatch(gpsTrip.watchId);
-  if(gpsTrip.elapsedTimer) clearInterval(gpsTrip.elapsedTimer);
-  var endCoords=gpsTrip.currentCoords||gpsTrip.startCoords;
-  var s=document.getElementById('gps-status');
-  if(s) s.textContent='Calculating route...';
-  var roadKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
-  var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
-  var date=new Date().toISOString().split('T')[0];
-  var startAddr=gpsTrip.startAddress;
+function gpsCancelTrip(){
+  gpsTrip={active:false,startCoords:null,startAddress:''};
+  localStorage.removeItem('nzrt_gps_trip');
   var banner=document.getElementById('gps-active-banner');
   var trackBtn=document.getElementById('gps-track-btn');
   if(banner) banner.style.display='none';
   if(trackBtn) trackBtn.style.display='block';
-  gpsTrip={active:false,startCoords:null,startTime:null,startAddress:'',watchId:null,elapsedTimer:null,currentCoords:null};
+  showToast('Trip cancelled');
+}
+
+function gpsEndSnapshot(){
+  if(!gpsTrip.active){showToast('No trip in progress');return;}
+  var banner=document.getElementById('gps-active-banner');
+  if(banner) banner.innerHTML='<div style="text-align:center;padding:12px;color:var(--accent-dark);font-weight:600;">Getting arrival location...</div>';
+  navigator.geolocation.getCurrentPosition(function(pos){
+    gpsEndSnapshotWithPos(pos);
+  },function(err){
+    showToast('Could not get location — check GPS permissions');
+    renderMileage();
+  },{enableHighAccuracy:true,timeout:15000});
+}
+
+async function gpsEndSnapshotWithPos(pos){
+  var endCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+  var roadKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
+  var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
+  var date=new Date().toISOString().split('T')[0];
+  var startAddr=gpsTrip.startAddress;
+  gpsTrip={active:false,startCoords:null,startAddress:''};
+  localStorage.removeItem('nzrt_gps_trip');
+  var banner=document.getElementById('gps-active-banner');
+  var trackBtn=document.getElementById('gps-track-btn');
+  if(banner) banner.style.display='none';
+  if(trackBtn) trackBtn.style.display='block';
   editMileId=null;
   document.getElementById('mile-modal-title').textContent='Add Trip';
   document.getElementById('m-date').value=date;
@@ -2787,7 +2773,24 @@ async function stopGPSTrip(){
   document.getElementById('mile-del-btn').style.display='none';
   document.getElementById('mile-bg').classList.add('open');
   setTimeout(function(){document.getElementById('modal-mile').classList.add('open');},10);
-  showToast('Trip recorded: ~'+roadKm+' km');
+  showToast('Trip: '+roadKm+' km — add purpose and save');
+}
+
+function gpsRestoreTrip(){
+  var saved=localStorage.getItem('nzrt_gps_trip');
+  if(!saved) return;
+  try{
+    var t=JSON.parse(saved);
+    if(t&&t.active&&t.startCoords){
+      gpsTrip=t;
+      var banner=document.getElementById('gps-active-banner');
+      var trackBtn=document.getElementById('gps-track-btn');
+      var fromLabel=document.getElementById('gps-from-label');
+      if(banner) banner.style.display='block';
+      if(trackBtn) trackBtn.style.display='none';
+      if(fromLabel) fromLabel.textContent='From: '+gpsTrip.startAddress;
+    }
+  }catch(e){localStorage.removeItem('nzrt_gps_trip');}
 }
 
 function openMileModal(id){
