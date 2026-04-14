@@ -535,26 +535,71 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
       <div style="display:flex;gap:8px;margin:0 16px 12px;">
         <button class="save-btn" style="background:var(--blue);flex:1;margin:0;" onclick="openMileModal(null)">+ Log a trip</button>
-        <button id="gps-track-btn" class="save-btn" style="flex:1;margin:0;background:rgba(52,199,89,.15);color:var(--accent-dark);border:1.5px solid rgba(52,199,89,.3);" onclick="gpsStartSnapshot()">📍 Start Trip</button>
+        <button id="gps-track-btn" class="save-btn" style="flex:1;margin:0;background:rgba(52,199,89,.15);color:var(--accent-dark);border:1.5px solid rgba(52,199,89,.3);" onclick="gpsShowStartModal()">📍 Start Trip</button>
       </div>
 
-      <!-- GPS: waiting for end snapshot -->
+      <!-- Active trip banner -->
       <div id="gps-active-banner" style="display:none;margin:0 16px 12px;background:rgba(52,199,89,.12);border:1.5px solid rgba(52,199,89,.4);border-radius:14px;padding:14px 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:22px;">🟢</span>
             <div>
-              <div style="font-weight:700;font-size:15px;color:var(--accent-dark);">Trip started</div>
-              <div id="gps-from-label" style="font-size:12px;color:var(--text3);">Getting location...</div>
+              <div style="font-weight:700;font-size:15px;color:var(--accent-dark);">Trip in progress</div>
+              <div id="gps-from-label" style="font-size:12px;color:var(--text3);"></div>
             </div>
           </div>
           <button onclick="gpsCancelTrip()" style="padding:6px 12px;border-radius:20px;border:1.5px solid rgba(255,59,48,.3);background:rgba(255,59,48,.08);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--red);">Cancel</button>
         </div>
         <div style="background:rgba(52,199,89,.15);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--text2);margin-bottom:10px;">
-          📱 You can now minimise the app and drive.<br>
+          📱 You can minimise the app and drive.<br>
           <strong>Tap "I've Arrived" when you reach your destination.</strong>
         </div>
-        <button onclick="gpsEndSnapshot()" style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">📍 I've Arrived</button>
+        <button onclick="gpsShowEndModal()" style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">📍 I've Arrived</button>
+      </div>
+
+      <!-- Start trip modal -->
+      <div id="gps-start-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseStartModal()">
+        <div id="gps-start-modal" class="modal-sheet">
+          <div class="modal-drag-bar"></div>
+          <div style="padding:0 16px 16px;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">Start Trip</div>
+            <div style="font-size:13px;color:var(--text3);margin-bottom:16px;">Enter your starting odometer reading</div>
+            <div style="background:var(--fill2);border-radius:14px;overflow:hidden;margin-bottom:12px;">
+              <button onclick="gpsOdoPhoto('start')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border:none;background:none;font-family:inherit;font-size:15px;cursor:pointer;color:var(--text1);border-bottom:0.5px solid var(--sep-l);">
+                <span style="font-size:20px;">📷</span><span>Photo of odometer</span>
+              </button>
+              <div style="padding:14px 16px;">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Or enter manually</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input id="gps-odo-start" type="number" inputmode="decimal" placeholder="e.g. 45231" style="flex:1;padding:10px 12px;border-radius:10px;border:0.5px solid var(--sep-l);background:var(--surface);font-family:inherit;font-size:16px;color:var(--text1);outline:none;">
+                  <span style="font-size:13px;color:var(--text3);">km</span>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="gps-odo-start-img" accept="image/*" capture="environment" style="display:none" onchange="gpsOdoStartPhotoChosen(event)">
+            <div id="gps-odo-start-preview" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden;max-height:160px;text-align:center;background:var(--fill2);">
+              <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
+            </div>
+            <button onclick="gpsConfirmStart()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
+            <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- End trip modal -->
+      <div id="gps-end-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseEndModal()">
+        <div id="gps-end-modal" class="modal-sheet">
+          <div class="modal-drag-bar"></div>
+          <div style="padding:0 16px 16px;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">You've Arrived!</div>
+            <div id="gps-trip-summary" style="font-size:13px;color:var(--text3);margin-bottom:16px;"></div>
+            <div style="background:rgba(52,199,89,.1);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:var(--accent-dark);">
+              📍 Tap <strong>Save Trip</strong> to grab your arrival GPS location and calculate the distance.
+            </div>
+            <button onclick="gpsConfirmEnd()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">📍 Save Trip</button>
+            <button onclick="gpsCloseEndModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
+          </div>
+        </div>
       </div>
       <div id="mile-list"></div>
       <div class="empty" id="mile-empty" style="display:none">
@@ -2673,8 +2718,8 @@ function renderMileage(){
 
 
 
-/* ── GPS SNAPSHOT TRIP TRACKING ── */
-var gpsTrip={active:false,startCoords:null,startAddress:''};
+/* ── GPS ODOMETER TRIP TRACKING ── */
+var gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
 
 function haversineKm(lat1,lon1,lat2,lon2){
   var R=6371;
@@ -2690,8 +2735,8 @@ async function getRoadDistanceKm(lat1,lon1,lat2,lon2){
     var r=await fetch(url);
     var d=await r.json();
     if(d.code==='Ok'&&d.routes&&d.routes[0]) return parseFloat((d.routes[0].distance/1000).toFixed(1));
-  }catch(e){console.warn('OSRM fallback');}
-  return parseFloat((haversineKm(lat1,lon1,lat2,lon2)*1.3).toFixed(1));
+  }catch(e){}
+  return null;
 }
 
 async function reverseGeocode(lat,lon){
@@ -2700,35 +2745,170 @@ async function reverseGeocode(lat,lon){
     var d=await r.json();
     var p=d.address||{};
     return [p.suburb||p.neighbourhood||p.village||p.town||p.city_district,p.city||p.town||p.county].filter(Boolean).join(', ')||d.display_name.split(',').slice(0,2).join(',').trim();
-  }catch(e){return lat.toFixed(4)+', '+lon.toFixed(4);}
+  }catch(e){return '';}
 }
 
-function gpsStartSnapshot(){
-  if(!navigator.geolocation){showToast('GPS not available on this device');return;}
-  if(gpsTrip.active){showToast('Trip already started');return;}
-  showToast('Getting your start location...');
-  navigator.geolocation.getCurrentPosition(function(pos){
-    gpsStartSnapshotWithPos(pos);
-  },function(err){
-    showToast('Could not get location — check GPS permissions');
+// ── START MODAL ──
+function gpsShowStartModal(){
+  document.getElementById('gps-start-bg').classList.add('open');
+  setTimeout(function(){document.getElementById('gps-start-modal').classList.add('open');},10);
+  var el=document.getElementById('gps-odo-start');
+  if(el) el.value='';
+  var prev=document.getElementById('gps-odo-start-preview');
+  if(prev) prev.style.display='none';
+}
+
+function gpsCloseStartModal(){
+  document.getElementById('gps-start-modal').classList.remove('open');
+  setTimeout(function(){document.getElementById('gps-start-bg').classList.remove('open');},300);
+}
+
+function gpsOdoPhoto(which){
+  var id=which==='start'?'gps-odo-start-img':'gps-odo-end-img';
+  var el=document.getElementById(id);
+  if(el) el.click();
+}
+
+function gpsOdoStartPhotoChosen(e){
+  var f=e.target.files[0];if(!f)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    document.getElementById('gps-odo-start-img-prev').src=ev.target.result;
+    document.getElementById('gps-odo-start-preview').style.display='block';
+    gpsTrip.startImg=ev.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+
+function gpsOdoEndPhotoChosen(e){
+  var f=e.target.files[0];if(!f)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    document.getElementById('gps-odo-end-img-prev').src=ev.target.result;
+    document.getElementById('gps-odo-end-preview').style.display='block';
+    gpsTrip.endImg=ev.target.result;
+    // Auto-calculate if end odo is already entered
+    gpsUpdateKmResult();
+  };
+  reader.readAsDataURL(f);
+}
+
+function gpsConfirmStart(){
+  var odoVal=document.getElementById('gps-odo-start').value.trim();
+  var odo=parseFloat(odoVal);
+  if(!odoVal&&!gpsTrip.startImg){showToast('Please enter or photograph your odometer reading');return;}
+  if(odoVal&&isNaN(odo)){showToast('Please enter a valid odometer reading');return;}
+
+  gpsTrip.active=true;
+  gpsTrip.startOdo=odoVal?odo:null;
+  gpsTrip.startTime=Date.now();
+
+  // Get GPS location for from-address (optional, don't block on it)
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      reverseGeocode(pos.coords.latitude,pos.coords.longitude).then(function(addr){
+        gpsTrip.startAddress=addr;
+        gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+        var lbl=document.getElementById('gps-from-label');
+        if(lbl) lbl.textContent=(gpsTrip.startOdo?'Odo: '+gpsTrip.startOdo+' km':'Started')+' · From: '+addr;
+        localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
+      });
+    },function(){},{ enableHighAccuracy:true,timeout:8000 });
+  }
+
+  localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
+  gpsCloseStartModal();
+
+  // Show active banner
+  var banner=document.getElementById('gps-active-banner');
+  var trackBtn=document.getElementById('gps-track-btn');
+  if(banner) banner.style.display='block';
+  if(trackBtn) trackBtn.style.display='none';
+  var lbl=document.getElementById('gps-from-label');
+  if(lbl) lbl.textContent=gpsTrip.startOdo?'Odo start: '+gpsTrip.startOdo+' km':'Getting location...';
+  showToast('Trip started — drive safely! 🚗');
+}
+
+// ── END MODAL ──
+function gpsShowEndModal(){
+  var summary=document.getElementById('gps-trip-summary');
+  if(summary){
+    var txt=gpsTrip.startAddress?'From: '+gpsTrip.startAddress:'';
+    if(gpsTrip.startOdo) txt+=(txt?' · ':'')+'Odo start: '+gpsTrip.startOdo+' km';
+    summary.textContent=txt||'Enter your arrival odometer reading';
+  }
+  var el=document.getElementById('gps-odo-end');
+  if(el) el.value='';
+  var prev=document.getElementById('gps-odo-end-preview');
+  if(prev) prev.style.display='none';
+  var res=document.getElementById('gps-km-result');
+  if(res) res.style.display='none';
+  document.getElementById('gps-end-bg').classList.add('open');
+  setTimeout(function(){document.getElementById('gps-end-modal').classList.add('open');},10);
+}
+
+function gpsCloseEndModal(){
+  document.getElementById('gps-end-modal').classList.remove('open');
+  setTimeout(function(){document.getElementById('gps-end-bg').classList.remove('open');},300);
+}
+
+function gpsUpdateKmResult(){
+  var startOdo=gpsTrip.startOdo;
+  var endVal=document.getElementById('gps-odo-end').value.trim();
+  var endOdo=parseFloat(endVal);
+  var res=document.getElementById('gps-km-result');
+  var val=document.getElementById('gps-km-val');
+  if(startOdo&&!isNaN(endOdo)&&endOdo>startOdo){
+    var km=(endOdo-startOdo).toFixed(1);
+    if(res) res.style.display='flex';
+    if(val) val.textContent=km+' km';
+  } else {
+    if(res) res.style.display='none';
+  }
+}
+
+async function gpsConfirmEnd(){
+  gpsCloseEndModal();
+  showToast('Getting arrival location...');
+  navigator.geolocation.getCurrentPosition(async function(pos){
+    var endCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+    var km=null;
+    var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
+    // Use GPS road distance
+    if(gpsTrip.startCoords){
+      km=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
+    }
+    var date=new Date().toISOString().split('T')[0];
+    var startAddr=gpsTrip.startAddress||'';
+    var startOdo=gpsTrip.startOdo;
+    // Clear trip
+    gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
+    localStorage.removeItem('nzrt_gps_trip');
+    var banner=document.getElementById('gps-active-banner');
+    var trackBtn=document.getElementById('gps-track-btn');
+    if(banner) banner.style.display='none';
+    if(trackBtn) trackBtn.style.display='block';
+    // Pre-fill trip modal
+    editMileId=null;
+    document.getElementById('mile-modal-title').textContent='Add Trip';
+    document.getElementById('m-date').value=date;
+    document.getElementById('m-from').value=startAddr;
+    document.getElementById('m-to').value=endAddress;
+    document.getElementById('m-km').value=km>0?km:'';
+    document.getElementById('m-odo-start').value=startOdo||'';
+    document.getElementById('m-odo-end').value='';
+    document.getElementById('m-purpose').value='';
+    document.getElementById('mile-del-btn').style.display='none';
+    document.getElementById('mile-bg').classList.add('open');
+    setTimeout(function(){document.getElementById('modal-mile').classList.add('open');},10);
+    showToast(km?'Trip: '+km+' km — add purpose and save':'Trip logged — check details and save');
+  },function(){
+    showToast('Could not get arrival location — please log trip manually');
   },{enableHighAccuracy:true,timeout:15000});
 }
 
-async function gpsStartSnapshotWithPos(pos){
-  gpsTrip.active=true;
-  gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
-  gpsTrip.startAddress=await reverseGeocode(pos.coords.latitude,pos.coords.longitude);
-  var banner=document.getElementById('gps-active-banner');
-  var trackBtn=document.getElementById('gps-track-btn');
-  var fromLabel=document.getElementById('gps-from-label');
-  if(banner) banner.style.display='block';
-  if(trackBtn) trackBtn.style.display='none';
-  if(fromLabel) fromLabel.textContent='From: '+gpsTrip.startAddress;
-  localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
-}
-
 function gpsCancelTrip(){
-  gpsTrip={active:false,startCoords:null,startAddress:''};
+  gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
   localStorage.removeItem('nzrt_gps_trip');
   var banner=document.getElementById('gps-active-banner');
   var trackBtn=document.getElementById('gps-track-btn');
@@ -2737,62 +2917,26 @@ function gpsCancelTrip(){
   showToast('Trip cancelled');
 }
 
-function gpsEndSnapshot(){
-  if(!gpsTrip.active){showToast('No trip in progress');return;}
-  var banner=document.getElementById('gps-active-banner');
-  if(banner) banner.innerHTML='<div style="text-align:center;padding:12px;color:var(--accent-dark);font-weight:600;">Getting arrival location...</div>';
-  navigator.geolocation.getCurrentPosition(function(pos){
-    gpsEndSnapshotWithPos(pos);
-  },function(err){
-    showToast('Could not get location — check GPS permissions');
-    renderMileage();
-  },{enableHighAccuracy:true,timeout:15000});
-}
-
-async function gpsEndSnapshotWithPos(pos){
-  var endCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
-  var roadKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
-  var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
-  var date=new Date().toISOString().split('T')[0];
-  var startAddr=gpsTrip.startAddress;
-  gpsTrip={active:false,startCoords:null,startAddress:''};
-  localStorage.removeItem('nzrt_gps_trip');
-  var banner=document.getElementById('gps-active-banner');
-  var trackBtn=document.getElementById('gps-track-btn');
-  if(banner) banner.style.display='none';
-  if(trackBtn) trackBtn.style.display='block';
-  editMileId=null;
-  document.getElementById('mile-modal-title').textContent='Add Trip';
-  document.getElementById('m-date').value=date;
-  document.getElementById('m-from').value=startAddr||'';
-  document.getElementById('m-to').value=endAddress;
-  document.getElementById('m-km').value=roadKm>0?roadKm:'';
-  document.getElementById('m-odo-start').value='';
-  document.getElementById('m-odo-end').value='';
-  document.getElementById('m-purpose').value='';
-  document.getElementById('mile-del-btn').style.display='none';
-  document.getElementById('mile-bg').classList.add('open');
-  setTimeout(function(){document.getElementById('modal-mile').classList.add('open');},10);
-  showToast('Trip: '+roadKm+' km — add purpose and save');
-}
-
 function gpsRestoreTrip(){
   var saved=localStorage.getItem('nzrt_gps_trip');
   if(!saved) return;
   try{
     var t=JSON.parse(saved);
-    if(t&&t.active&&t.startCoords){
+    if(t&&t.active){
       gpsTrip=t;
       var banner=document.getElementById('gps-active-banner');
       var trackBtn=document.getElementById('gps-track-btn');
-      var fromLabel=document.getElementById('gps-from-label');
+      var lbl=document.getElementById('gps-from-label');
       if(banner) banner.style.display='block';
       if(trackBtn) trackBtn.style.display='none';
-      if(fromLabel) fromLabel.textContent='From: '+gpsTrip.startAddress;
+      if(lbl){
+        var txt=gpsTrip.startOdo?'Odo start: '+gpsTrip.startOdo+' km':'Trip in progress';
+        if(gpsTrip.startAddress) txt+=' · '+gpsTrip.startAddress;
+        lbl.textContent=txt;
+      }
     }
   }catch(e){localStorage.removeItem('nzrt_gps_trip');}
 }
-
 function openMileModal(id){
   try{
   editMileId=id;
