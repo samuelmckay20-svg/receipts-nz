@@ -246,10 +246,10 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 .shutter:active .shutter-in { transform:scale(.86); }
 
 /* MODALS */
-.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:5000; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
 .modal-bg.open { display:block; }
-.modal { position:fixed; bottom:0; left:0; right:0; top:auto; z-index:201; background:var(--bg); border-radius:24px 24px 0 0; padding-bottom:var(--safe-bottom); max-height:calc(100dvh - var(--safe-top) - 20px); display:flex; flex-direction:column; transform:translateY(100%); transition:transform .3s cubic-bezier(.32,1,.23,1); }
-.modal.open { transform:translateY(0); }
+.modal { position:fixed; bottom:0; left:0; right:0; top:auto; z-index:5001; background:var(--bg); border-radius:24px 24px 0 0; padding-bottom:var(--safe-bottom); max-height:calc(100dvh - var(--safe-top) - 20px); display:flex; flex-direction:column; -webkit-transform:translateY(100%); transform:translateY(100%); transition:-webkit-transform .3s cubic-bezier(.32,1,.23,1),transform .3s cubic-bezier(.32,1,.23,1); }
+.modal.open { -webkit-transform:translateY(0); transform:translateY(0); }
 .modal-inner { overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1; }
 .modal-handle { width:36px; height:5px; border-radius:3px; background:var(--fill2); margin:14px auto 8px; display:block; flex-shrink:0; }
 .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:0 20px 14px; border-bottom:0.5px solid var(--sep-l); background:var(--bg); flex-shrink:0; }
@@ -2716,12 +2716,14 @@ async function reverseGeocode(lat,lon){
 
 // ── START MODAL ──
 function gpsShowStartModal(){
-  var choice=confirm('How do you want to enter your odometer?\n\nOK = Take a photo\nCancel = Enter manually');
-  if(choice){
-    gpsOdoPhotoAction();
-  } else {
-    gpsOdoManualAction();
-  }
+  var el=document.getElementById('gps-odo-start');
+  if(el) el.value='';
+  var status=document.getElementById('gps-odo-scan-status');
+  if(status){status.style.display='none';status.textContent='';}
+  var prev=document.getElementById('gps-odo-start-preview');
+  if(prev) prev.style.display='none';
+  document.getElementById('gps-start-bg').classList.add('open');
+  setTimeout(function(){document.getElementById('gps-start-modal').classList.add('open');},10);
 }
 
 function gpsOdoPhotoAction(){
@@ -2737,7 +2739,19 @@ function gpsOdoManualAction(){
   gpsDoStart(num, null);
 }
 
-function gpsCloseStartModal(){} // no-op, kept for compatibility
+function gpsCloseStartModal(){
+  document.getElementById('gps-start-modal').classList.remove('open');
+  setTimeout(function(){document.getElementById('gps-start-bg').classList.remove('open');},300);
+}
+
+function gpsConfirmStartModal(){
+  var odoVal=document.getElementById('gps-odo-start').value.trim();
+  var odo=parseFloat(odoVal);
+  if(!odoVal){showToast('Please enter or photograph your odometer reading');return;}
+  if(isNaN(odo)||odo<=0){showToast('Please enter a valid odometer reading');return;}
+  gpsCloseStartModal();
+  gpsDoStart(odo, null);
+}
 
 function gpsOdoPhoto(which){
   var id=which==='start'?'gps-odo-start-img':'gps-odo-end-img';
@@ -2749,8 +2763,18 @@ function gpsOdoStartPhotoChosen(e){
   var f=e.target.files[0];if(!f)return;
   var reader=new FileReader();
   reader.onload=function(ev){
+    document.getElementById('gps-odo-start-img-prev').src=ev.target.result;
+    document.getElementById('gps-odo-start-preview').style.display='block';
     gpsScanOdometer(ev.target.result, function(num){
-      gpsDoStart(num, ev.target.result);
+      if(num){
+        var el=document.getElementById('gps-odo-start');
+        if(el) el.value=num;
+        var s=document.getElementById('gps-odo-scan-status');
+        if(s){s.style.display='block';s.textContent='✓ Read: '+num+' km — correct if needed then tap Start Trip';}
+      } else {
+        var s=document.getElementById('gps-odo-scan-status');
+        if(s){s.style.display='block';s.textContent='Could not read — please enter manually';}
+      }
     });
   };
   reader.readAsDataURL(f);
@@ -3941,7 +3965,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
             </div>
             <div id="gps-odo-scan-status" style="display:none;font-size:13px;color:var(--accent-dark);font-weight:600;margin-bottom:10px;text-align:center;"></div>
-            <button id="gps-start-trip-btn" onclick="gpsConfirmStart()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
+            <button id="gps-start-trip-btn" onclick="gpsConfirmStartModal()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
             <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
           </div>
         </div>
