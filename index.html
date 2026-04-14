@@ -2716,10 +2716,12 @@ async function reverseGeocode(lat,lon){
 
 // ── START MODAL ──
 function gpsShowStartModal(){
-  showActionSheet('Start Trip — Enter Odometer', [
-    {label:'📷  Photo of odometer', action:'gpsOdoPhotoAction()'},
-    {label:'✏️  Enter manually', action:'gpsOdoManualAction()'},
-  ]);
+  var choice=confirm('How do you want to enter your odometer?\n\nOK = Take a photo\nCancel = Enter manually');
+  if(choice){
+    gpsOdoPhotoAction();
+  } else {
+    gpsOdoManualAction();
+  }
 }
 
 function gpsOdoPhotoAction(){
