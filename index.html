@@ -2787,9 +2787,8 @@ async function gpsScanOdometer(imgData){
   var key=getApiKey();
   if(!key) return;
   var statusEl=document.getElementById('gps-odo-scan-status');
-  var startBtn=document.getElementById('gps-start-trip-btn');
   if(statusEl){statusEl.style.display='block';statusEl.textContent='🔍 Reading odometer...';}
-  if(startBtn){startBtn.disabled=true;startBtn.style.opacity='0.5';}
+  // Never block the UI — run scan in background only
   try{
     var base64=imgData.split(',')[1];
     var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
@@ -2798,32 +2797,36 @@ async function gpsScanOdometer(imgData){
       max_tokens:100,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-        {type:'text',text:'This is a photo of a vehicle odometer. Read the odometer carefully digit by digit and return ONLY the total kilometre reading as a plain integer. Common mistakes to avoid: do not confuse 7 and 1, do not confuse 8 and 0, do not confuse 6 and 0. If there are decimal digits after a dot or comma, ignore them and return only the whole number. If you cannot read it clearly, respond with "unclear".'}
+        {type:'text',text:'This is a photo of a vehicle odometer. Read the odometer carefully digit by digit and return ONLY the total kilometre reading as a plain integer. Do not confuse 7 and 1, 8 and 0, or 6 and 0. Ignore decimal digits. If unclear respond with "unclear".'}
       ]}]
     });
     var controller=new AbortController();
-    var timeout=setTimeout(function(){controller.abort();},10000);
-    var res=await fetch('https://api.anthropic.com/v1/messages',{
+    setTimeout(function(){controller.abort();},10000);
+    fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:body,
       signal:controller.signal
+    }).then(function(res){
+      return res.json();
+    }).then(function(data){
+      var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
+      var num=parseFloat(text.replace(/[^0-9.]/g,''));
+      if(!isNaN(num)&&num>0){
+        var el=document.getElementById('gps-odo-start');
+        if(el) el.value=Math.round(num);
+        var s=document.getElementById('gps-odo-scan-status');
+        if(s) s.textContent='✓ Read: '+Math.round(num)+' km — correct if needed';
+      } else {
+        var s=document.getElementById('gps-odo-scan-status');
+        if(s) s.textContent='Could not read — please enter manually';
+      }
+    }).catch(function(){
+      var s=document.getElementById('gps-odo-scan-status');
+      if(s) s.textContent='Scan failed — please enter manually';
     });
-    clearTimeout(timeout);
-    var data=await res.json();
-    var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
-    var num=parseFloat(text.replace(/[^0-9.]/g,''));
-    if(!isNaN(num)&&num>0){
-      var el=document.getElementById('gps-odo-start');
-      if(el) el.value=Math.round(num);
-      if(statusEl) statusEl.textContent='✓ Read: '+Math.round(num)+' km — correct if needed';
-    } else {
-      if(statusEl) statusEl.textContent='Could not read — please enter manually';
-    }
   }catch(err){
-    if(statusEl) statusEl.textContent='Scan failed — please enter manually';
-  } finally {
-    if(startBtn){startBtn.disabled=false;startBtn.style.opacity='';}
+    if(statusEl) statusEl.textContent='Scan unavailable — please enter manually';
   }
 }
 
