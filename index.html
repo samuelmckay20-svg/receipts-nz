@@ -557,51 +557,6 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         <button onclick="gpsShowEndModal()" style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">📍 I've Arrived</button>
       </div>
 
-      <!-- Start trip modal -->
-      <div id="gps-start-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseStartModal()">
-        <div id="gps-start-modal" class="modal">
-          <div style="width:36px;height:4px;background:var(--fill3);border-radius:2px;margin:12px auto 0;"></div>
-          <div style="padding:0 16px 16px;">
-            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">Start Trip</div>
-            <div style="font-size:13px;color:var(--text3);margin-bottom:16px;">Enter your starting odometer reading</div>
-            <div style="background:var(--fill2);border-radius:14px;overflow:hidden;margin-bottom:12px;">
-              <button onclick="gpsOdoPhoto('start')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border:none;background:none;font-family:inherit;font-size:15px;cursor:pointer;color:var(--text1);border-bottom:0.5px solid var(--sep-l);">
-                <span style="font-size:20px;">📷</span><span>Photo of odometer</span>
-              </button>
-              <div style="padding:14px 16px;">
-                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Or enter manually</div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <input id="gps-odo-start" type="number" inputmode="decimal" placeholder="e.g. 45231" style="flex:1;padding:10px 12px;border-radius:10px;border:0.5px solid var(--sep-l);background:var(--surface);font-family:inherit;font-size:16px;color:var(--text1);outline:none;">
-                  <span style="font-size:13px;color:var(--text3);">km</span>
-                </div>
-              </div>
-            </div>
-            <input type="file" id="gps-odo-start-img" accept="image/*" capture="environment" style="display:none" onchange="gpsOdoStartPhotoChosen(event)">
-            <div id="gps-odo-start-preview" style="display:none;margin-bottom:8px;border-radius:12px;overflow:hidden;max-height:160px;text-align:center;background:var(--fill2);">
-              <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
-            </div>
-            <div id="gps-odo-scan-status" style="display:none;font-size:13px;color:var(--accent-dark);font-weight:600;margin-bottom:10px;text-align:center;"></div>
-            <button id="gps-start-trip-btn" onclick="gpsConfirmStart()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
-            <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- End trip modal -->
-      <div id="gps-end-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseEndModal()">
-        <div id="gps-end-modal" class="modal">
-          <div style="width:36px;height:4px;background:var(--fill3);border-radius:2px;margin:12px auto 0;"></div>
-          <div style="padding:0 16px 16px;">
-            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">You've Arrived!</div>
-            <div id="gps-trip-summary" style="font-size:13px;color:var(--text3);margin-bottom:16px;"></div>
-            <div style="background:rgba(52,199,89,.1);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:var(--accent-dark);">
-              📍 Tap <strong>Save Trip</strong> to grab your arrival GPS location and calculate the distance.
-            </div>
-            <button onclick="gpsConfirmEnd()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">📍 Save Trip</button>
-            <button onclick="gpsCloseEndModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
-          </div>
-        </div>
-      </div>
       <div id="mile-list"></div>
       <div class="empty" id="mile-empty" style="display:none">
         <div class="empty-ico">🚗</div>
@@ -1548,6 +1503,16 @@ function renderOverview(){
       var d=new Date(r.date+'T12:00:00');
       return d>=cur&&d<=mEnd;
     }).reduce(function(s,r){return s+claimableForReceipt(r);},0);
+    // Add mileage value for this month
+    var mCurCopy=new Date(cur);
+    var mEndCopy=new Date(mEnd);
+    var mMiles=mileage.filter(function(m){var d=new Date(m.date+'T12:00:00');return d>=mCurCopy&&d<=mEndCopy;});
+    var mCumKm=0;
+    // Calculate cumulative km up to this month for tier calculation
+    var allPriorMiles=mileage.filter(function(m){var d=new Date(m.date+'T12:00:00');return d>=selFY.start&&d<mCurCopy;}).sort(function(a,b){return a.date.localeCompare(b.date);});
+    allPriorMiles.forEach(function(m){mCumKm+=m.km;});
+    var mMileVal=mMiles.slice().sort(function(a,b){return a.date.localeCompare(b.date);}).reduce(function(s,m){var v=calcMileValue(m.km,mCumKm);mCumKm+=m.km;return s+v;},0);
+    mSpend+=mMileVal;
     var mGST=receipts.filter(function(r){
       var d=new Date(r.date+'T12:00:00');
       return d>=cur&&d<=mEnd;
@@ -3948,5 +3913,50 @@ document.addEventListener('DOMContentLoaded', async () => {
 <!-- Hidden file inputs for overview capture -->
 <input type="file" id="ov-file-in" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" onchange="overviewFileChosen(event)" style="display:none">
 <input type="file" id="ov-pdf-in" accept="application/pdf,.pdf" onchange="overviewPDFChosen(event)" style="display:none">
+<!-- Start trip modal -->
+      <div id="gps-start-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseStartModal()">
+        <div id="gps-start-modal" class="modal">
+          <div style="width:36px;height:4px;background:var(--fill3);border-radius:2px;margin:12px auto 0;flex-shrink:0;"></div>
+          <div style="padding:0 16px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">Start Trip</div>
+            <div style="font-size:13px;color:var(--text3);margin-bottom:16px;">Enter your starting odometer reading</div>
+            <div style="background:var(--fill2);border-radius:14px;overflow:hidden;margin-bottom:12px;">
+              <button onclick="gpsOdoPhoto('start')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border:none;background:none;font-family:inherit;font-size:15px;cursor:pointer;color:var(--text1);border-bottom:0.5px solid var(--sep-l);">
+                <span style="font-size:20px;">📷</span><span>Photo of odometer</span>
+              </button>
+              <div style="padding:14px 16px;">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Or enter manually</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input id="gps-odo-start" type="number" inputmode="decimal" placeholder="e.g. 45231" style="flex:1;padding:10px 12px;border-radius:10px;border:0.5px solid var(--sep-l);background:var(--surface);font-family:inherit;font-size:16px;color:var(--text1);outline:none;">
+                  <span style="font-size:13px;color:var(--text3);">km</span>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="gps-odo-start-img" accept="image/*" capture="environment" style="display:none" onchange="gpsOdoStartPhotoChosen(event)">
+            <div id="gps-odo-start-preview" style="display:none;margin-bottom:8px;border-radius:12px;overflow:hidden;max-height:160px;text-align:center;background:var(--fill2);">
+              <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
+            </div>
+            <div id="gps-odo-scan-status" style="display:none;font-size:13px;color:var(--accent-dark);font-weight:600;margin-bottom:10px;text-align:center;"></div>
+            <button id="gps-start-trip-btn" onclick="gpsConfirmStart()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
+            <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- End trip modal -->
+      <div id="gps-end-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseEndModal()">
+        <div id="gps-end-modal" class="modal">
+          <div style="width:36px;height:4px;background:var(--fill3);border-radius:2px;margin:12px auto 0;flex-shrink:0;"></div>
+          <div style="padding:0 16px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-0.4px;">You've Arrived!</div>
+            <div id="gps-trip-summary" style="font-size:13px;color:var(--text3);margin-bottom:16px;"></div>
+            <div style="background:rgba(52,199,89,.1);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:14px;color:var(--accent-dark);">
+              📍 Tap <strong>Save Trip</strong> to grab your arrival GPS location and calculate the distance.
+            </div>
+            <button onclick="gpsConfirmEnd()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">📍 Save Trip</button>
+            <button onclick="gpsCloseEndModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
+          </div>
+        </div>
+      </div>
 </body>
 </html>
