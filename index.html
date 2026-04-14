@@ -2716,18 +2716,26 @@ async function reverseGeocode(lat,lon){
 
 // ── START MODAL ──
 function gpsShowStartModal(){
-  document.getElementById('gps-start-bg').classList.add('open');
-  setTimeout(function(){document.getElementById('gps-start-modal').classList.add('open');},10);
-  var el=document.getElementById('gps-odo-start');
-  if(el) el.value='';
-  var prev=document.getElementById('gps-odo-start-preview');
-  if(prev) prev.style.display='none';
+  showActionSheet('Start Trip — Enter Odometer', [
+    {label:'📷  Photo of odometer', action:'gpsOdoPhotoAction()'},
+    {label:'✏️  Enter manually', action:'gpsOdoManualAction()'},
+  ]);
 }
 
-function gpsCloseStartModal(){
-  document.getElementById('gps-start-modal').classList.remove('open');
-  setTimeout(function(){document.getElementById('gps-start-bg').classList.remove('open');},300);
+function gpsOdoPhotoAction(){
+  var el=document.getElementById('gps-odo-start-img');
+  if(el) el.click();
 }
+
+function gpsOdoManualAction(){
+  var val=prompt('Enter starting odometer reading (km):');
+  if(val===null) return;
+  var num=parseFloat(val.replace(/[^0-9.]/g,''));
+  if(isNaN(num)||num<=0){showToast('Please enter a valid odometer reading');return;}
+  gpsDoStart(num, null);
+}
+
+function gpsCloseStartModal(){} // no-op, kept for compatibility
 
 function gpsOdoPhoto(which){
   var id=which==='start'?'gps-odo-start-img':'gps-odo-end-img';
@@ -2739,21 +2747,49 @@ function gpsOdoStartPhotoChosen(e){
   var f=e.target.files[0];if(!f)return;
   var reader=new FileReader();
   reader.onload=function(ev){
-    document.getElementById('gps-odo-start-img-prev').src=ev.target.result;
-    document.getElementById('gps-odo-start-preview').style.display='block';
-    gpsTrip.startImg=ev.target.result;
-    // Auto-scan the odometer with AI
-    gpsScanOdometer(ev.target.result);
+    gpsScanOdometer(ev.target.result, function(num){
+      gpsDoStart(num, ev.target.result);
+    });
   };
   reader.readAsDataURL(f);
 }
 
-async function gpsScanOdometer(imgData){
+function gpsDoStart(odo, imgData){
+  gpsTrip.active=true;
+  gpsTrip.startOdo=odo||null;
+  gpsTrip.startImg=imgData||null;
+  gpsTrip.startTime=Date.now();
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      reverseGeocode(pos.coords.latitude,pos.coords.longitude).then(function(addr){
+        gpsTrip.startAddress=addr;
+        gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+        var lbl=document.getElementById('gps-from-label');
+        if(lbl) lbl.textContent=(gpsTrip.startOdo?'Odo: '+gpsTrip.startOdo+' km':'Started')+' · '+addr;
+        localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
+      });
+    },function(){},{ enableHighAccuracy:true,timeout:8000 });
+  }
+  localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
+  var banner=document.getElementById('gps-active-banner');
+  var trackBtn=document.getElementById('gps-track-btn');
+  if(banner) banner.style.display='block';
+  if(trackBtn) trackBtn.style.display='none';
+  var lbl=document.getElementById('gps-from-label');
+  if(lbl) lbl.textContent=gpsTrip.startOdo?'Odo start: '+gpsTrip.startOdo+' km':'Getting location...';
+  showToast('Trip started — drive safely! 🚗');
+}
+
+function gpsScanOdometer(imgData, callback){
   var key=getApiKey();
-  if(!key) return;
-  var statusEl=document.getElementById('gps-odo-scan-status');
-  if(statusEl){statusEl.style.display='block';statusEl.textContent='🔍 Reading odometer...';}
-  // Never block the UI — run scan in background only
+  showToast('🔍 Reading odometer...');
+  if(!key){
+    // No API key — ask manually
+    var val=prompt('Could not auto-read. Enter odometer reading (km):');
+    var num=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
+    callback((!isNaN(num)&&num>0)?num:null);
+    return;
+  }
   try{
     var base64=imgData.split(',')[1];
     var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
@@ -2772,26 +2808,27 @@ async function gpsScanOdometer(imgData){
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:body,
       signal:controller.signal
-    }).then(function(res){
-      return res.json();
-    }).then(function(data){
+    }).then(function(res){return res.json();})
+    .then(function(data){
       var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
       var num=parseFloat(text.replace(/[^0-9.]/g,''));
       if(!isNaN(num)&&num>0){
-        var el=document.getElementById('gps-odo-start');
-        if(el) el.value=Math.round(num);
-        var s=document.getElementById('gps-odo-scan-status');
-        if(s) s.textContent='✓ Read: '+Math.round(num)+' km — correct if needed';
+        showToast('✓ Odometer read: '+Math.round(num)+' km');
+        callback(Math.round(num));
       } else {
-        var s=document.getElementById('gps-odo-scan-status');
-        if(s) s.textContent='Could not read — please enter manually';
+        var val=prompt('Could not read odometer clearly. Please enter reading (km):');
+        var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
+        callback((!isNaN(n)&&n>0)?n:null);
       }
     }).catch(function(){
-      var s=document.getElementById('gps-odo-scan-status');
-      if(s) s.textContent='Scan failed — please enter manually';
+      var val=prompt('Scan failed. Please enter odometer reading (km):');
+      var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
+      callback((!isNaN(n)&&n>0)?n:null);
     });
   }catch(err){
-    if(statusEl) statusEl.textContent='Scan unavailable — please enter manually';
+    var val=prompt('Enter odometer reading (km):');
+    var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
+    callback((!isNaN(n)&&n>0)?n:null);
   }
 }
 
@@ -2808,41 +2845,6 @@ function gpsOdoEndPhotoChosen(e){
   reader.readAsDataURL(f);
 }
 
-function gpsConfirmStart(){
-  var odoVal=document.getElementById('gps-odo-start').value.trim();
-  var odo=parseFloat(odoVal);
-  if(!odoVal&&!gpsTrip.startImg){showToast('Please enter or photograph your odometer reading');return;}
-  if(odoVal&&isNaN(odo)){showToast('Please enter a valid odometer reading');return;}
-
-  gpsTrip.active=true;
-  gpsTrip.startOdo=odoVal?odo:null;
-  gpsTrip.startTime=Date.now();
-
-  // Get GPS location for from-address (optional, don't block on it)
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(function(pos){
-      reverseGeocode(pos.coords.latitude,pos.coords.longitude).then(function(addr){
-        gpsTrip.startAddress=addr;
-        gpsTrip.startCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
-        var lbl=document.getElementById('gps-from-label');
-        if(lbl) lbl.textContent=(gpsTrip.startOdo?'Odo: '+gpsTrip.startOdo+' km':'Started')+' · From: '+addr;
-        localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
-      });
-    },function(){},{ enableHighAccuracy:true,timeout:8000 });
-  }
-
-  localStorage.setItem('nzrt_gps_trip',JSON.stringify(gpsTrip));
-  gpsCloseStartModal();
-
-  // Show active banner
-  var banner=document.getElementById('gps-active-banner');
-  var trackBtn=document.getElementById('gps-track-btn');
-  if(banner) banner.style.display='block';
-  if(trackBtn) trackBtn.style.display='none';
-  var lbl=document.getElementById('gps-from-label');
-  if(lbl) lbl.textContent=gpsTrip.startOdo?'Odo start: '+gpsTrip.startOdo+' km':'Getting location...';
-  showToast('Trip started — drive safely! 🚗');
-}
 
 // ── END MODAL ──
 function gpsShowEndModal(){
