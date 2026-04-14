@@ -577,9 +577,10 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
               </div>
             </div>
             <input type="file" id="gps-odo-start-img" accept="image/*" capture="environment" style="display:none" onchange="gpsOdoStartPhotoChosen(event)">
-            <div id="gps-odo-start-preview" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden;max-height:160px;text-align:center;background:var(--fill2);">
+            <div id="gps-odo-start-preview" style="display:none;margin-bottom:8px;border-radius:12px;overflow:hidden;max-height:160px;text-align:center;background:var(--fill2);">
               <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
             </div>
+            <div id="gps-odo-scan-status" style="display:none;font-size:13px;color:var(--accent-dark);font-weight:600;margin-bottom:10px;text-align:center;"></div>
             <button onclick="gpsConfirmStart()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
             <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
           </div>
@@ -2776,8 +2777,46 @@ function gpsOdoStartPhotoChosen(e){
     document.getElementById('gps-odo-start-img-prev').src=ev.target.result;
     document.getElementById('gps-odo-start-preview').style.display='block';
     gpsTrip.startImg=ev.target.result;
+    // Auto-scan the odometer with AI
+    gpsScanOdometer(ev.target.result);
   };
   reader.readAsDataURL(f);
+}
+
+async function gpsScanOdometer(imgData){
+  var key=getApiKey();
+  if(!key) return; // No API key — user enters manually
+  var statusEl=document.getElementById('gps-odo-scan-status');
+  if(statusEl){statusEl.style.display='block';statusEl.textContent='🔍 Reading odometer...';}
+  try{
+    var base64=imgData.split(',')[1];
+    var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
+    var body=JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:100,
+      messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+        {type:'text',text:'This is a photo of a vehicle odometer. Extract ONLY the odometer reading as a number (kilometres). Respond with just the number, nothing else. If you cannot read it clearly, respond with "unclear".'}
+      ]}]
+    });
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:body
+    });
+    var data=await res.json();
+    var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
+    var num=parseFloat(text.replace(/[^0-9.]/g,''));
+    if(!isNaN(num)&&num>0){
+      var el=document.getElementById('gps-odo-start');
+      if(el) el.value=Math.round(num);
+      if(statusEl) statusEl.textContent='✓ Odometer read: '+Math.round(num)+' km';
+    } else {
+      if(statusEl) statusEl.textContent='Could not read — please enter manually';
+    }
+  }catch(err){
+    if(statusEl) statusEl.textContent='Scan failed — please enter manually';
+  }
 }
 
 function gpsOdoEndPhotoChosen(e){
