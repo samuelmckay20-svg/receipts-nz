@@ -2796,7 +2796,7 @@ async function gpsScanOdometer(imgData){
       max_tokens:100,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-        {type:'text',text:'This is a photo of a vehicle odometer. Extract ONLY the odometer reading as a number (kilometres). Respond with just the number, nothing else. If you cannot read it clearly, respond with "unclear".'}
+        {type:'text',text:'This is a photo of a vehicle odometer. Read the odometer carefully digit by digit and return ONLY the total kilometre reading as a plain integer. Common mistakes to avoid: do not confuse 7 and 1, do not confuse 8 and 0, do not confuse 6 and 0. If there are decimal digits after a dot or comma, ignore them and return only the whole number. If you cannot read it clearly, respond with "unclear".'}
       ]}]
     });
     var res=await fetch('https://api.anthropic.com/v1/messages',{
