@@ -2824,7 +2824,7 @@ function gpsScanOdometer(imgData, callback){
       max_tokens:100,
       messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-        {type:'text',text:'This is a photo of a vehicle odometer. Read the odometer carefully digit by digit and return ONLY the total kilometre reading as a plain integer. Do not confuse 7 and 1, 8 and 0, or 6 and 0. Ignore decimal digits. If unclear respond with "unclear".'}
+        {type:'text',text:'Look at this odometer photo carefully. The odometer shows a number in km or km/h digits. Read ONLY the main odometer digits (the large number showing total distance travelled, not the trip meter). Return ONLY the integer number with no units, commas, spaces or other text. For example: 87432. If the image is too blurry or unclear to read confidently, respond with just the word unclear.'}
       ]}]
     });
     var controller=new AbortController();
@@ -2917,13 +2917,16 @@ async function gpsConfirmEnd(){
     var endCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
     var km=null;
     var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
-    // Use GPS road distance
+    // Use GPS road distance — rounded to whole km
     if(gpsTrip.startCoords){
-      km=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
+      var rawKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
+      km=rawKm?Math.round(rawKm):null;
     }
     var date=new Date().toISOString().split('T')[0];
     var startAddr=gpsTrip.startAddress||'';
     var startOdo=gpsTrip.startOdo;
+    // Auto-calculate end odometer from start odo + km
+    var endOdo=(startOdo&&km)?(startOdo+km):null;
     // Clear trip
     gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
     localStorage.removeItem('nzrt_gps_trip');
@@ -2939,7 +2942,7 @@ async function gpsConfirmEnd(){
     document.getElementById('m-to').value=endAddress;
     document.getElementById('m-km').value=km>0?km:'';
     document.getElementById('m-odo-start').value=startOdo||'';
-    document.getElementById('m-odo-end').value='';
+    document.getElementById('m-odo-end').value=endOdo||'';
     document.getElementById('m-purpose').value='';
     document.getElementById('mile-del-btn').style.display='none';
     document.getElementById('mile-bg').classList.add('open');
