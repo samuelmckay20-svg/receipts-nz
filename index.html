@@ -2825,6 +2825,21 @@ function gpsHideLoading(){
   if(el) el.style.display='none';
 }
 
+function gpsCompressImage(dataUrl, callback){
+  var img=new Image();
+  img.onload=function(){
+    var canvas=document.createElement('canvas');
+    var maxSize=800;
+    var w=img.width, h=img.height;
+    if(w>h){if(w>maxSize){h=Math.round(h*maxSize/w);w=maxSize;}}
+    else{if(h>maxSize){w=Math.round(w*maxSize/h);h=maxSize;}}
+    canvas.width=w;canvas.height=h;
+    canvas.getContext('2d').drawImage(img,0,0,w,h);
+    callback(canvas.toDataURL('image/jpeg',0.7));
+  };
+  img.src=dataUrl;
+}
+
 function gpsApiCall(base64, mediaType, prompt){
   var key=getApiKey();
   if(!key){gpsDebug('No API key found');return Promise.resolve(null);}
@@ -2838,7 +2853,7 @@ function gpsApiCall(base64, mediaType, prompt){
     ]}]
   });
   var controller=new AbortController();
-  var timeout=setTimeout(function(){controller.abort();},15000);
+  var timeout=setTimeout(function(){controller.abort();},30000);
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -2871,34 +2886,26 @@ function gpsDebug(msg){
 function gpsScanOdometer(imgData, callback){
   var key=getApiKey();
   if(!key){callback(null);return;}
-
   gpsShowLoading('Reading odometer...');
-
-  var base64=imgData.split(',')[1];
-  var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
-
-  var prompt1='This vehicle odometer shows the total km travelled. Reply with ONLY the odometer number as digits. Example: 87432';
-  var prompt2='Read the main odometer display in this image. Ignore the trip meter. Return ONLY the integer km reading, nothing else.';
-
-  Promise.all([
-    gpsApiCall(base64, mediaType, prompt1),
-    gpsApiCall(base64, mediaType, prompt2)
-  ]).then(function(results){
-    gpsHideLoading();
-    var a=results[0], b=results[1];
-
-    // Both agree within 2km — high confidence
-    if(a&&b&&Math.abs(a-b)<=2){
-      callback(a);
-      return;
-    }
-
-    // One succeeded — use it
-    if(a&&!b){callback(a);return;}
-    if(b&&!a){callback(b);return;}
-
-    // Both failed — callback null, user enters manually
-    callback(null);
+  // Compress first to avoid fetch abort on large images
+  gpsCompressImage(imgData, function(compressed){
+    var base64=compressed.split(',')[1];
+    var mediaType='image/jpeg';
+    console.log('gpsScanOdometer: compressed base64 length='+base64.length);
+    var prompt1='This vehicle odometer shows the total km travelled. Reply with ONLY the odometer number as digits. Example: 87432';
+    var prompt2='Read the main odometer display in this image. Ignore the trip meter. Return ONLY the integer km reading, nothing else.';
+    Promise.all([
+      gpsApiCall(base64, mediaType, prompt1),
+      gpsApiCall(base64, mediaType, prompt2)
+    ]).then(function(results){
+      gpsHideLoading();
+      var a=results[0], b=results[1];
+      console.log('gpsScanOdometer: results a='+a+' b='+b);
+      if(a&&b&&Math.abs(a-b)<=2){callback(a);return;}
+      if(a&&!b){callback(a);return;}
+      if(b&&!a){callback(b);return;}
+      callback(null);
+    });
   });
 }
 
