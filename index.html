@@ -2850,8 +2850,8 @@ function gpsCompressImage(dataUrl, callback){
 
 function gpsApiCall(base64, mediaType, prompt){
   var key=getApiKey();
-  if(!key){gpsDebug('No API key found');return Promise.resolve(null);}
-  gpsDebug('Calling API... key='+key.substring(0,8)+'... img size='+base64.length);
+  if(!key) return Promise.resolve(null);
+
   var body=JSON.stringify({
     model:'claude-sonnet-4-6',
     max_tokens:20,
@@ -2869,27 +2869,18 @@ function gpsApiCall(base64, mediaType, prompt){
     signal:controller.signal
   }).then(function(res){
     clearTimeout(timeout);
-    gpsDebug('HTTP status: '+res.status);
     return res.json();
   }).then(function(data){
     var text=(data.content&&data.content[0]&&data.content[0].text||data.error&&data.error.message||JSON.stringify(data)).trim();
-    gpsDebug('Response: "'+text.substring(0,80)+'"');
+
     var num=parseInt(text.replace(/[^0-9]/g,''),10);
-    gpsDebug('Parsed number: '+num);
     return (num&&num>100)?num:null;
   }).catch(function(err){
     clearTimeout(timeout);
-    gpsDebug('Fetch error: '+err.message);
     return null;
   });
 }
 
-function gpsDebug(msg){
-  var el=document.getElementById('gps-debug-log');
-  if(!el) return;
-  el.style.display='block';
-  el.innerHTML+=msg+'<br>';
-}
 
 function gpsScanOdometer(imgData, callback){
   var key=getApiKey();
@@ -4025,7 +4016,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <img id="gps-odo-start-img-prev" style="max-height:160px;object-fit:contain;">
             </div>
             <div id="gps-odo-scan-status" style="display:none;font-size:13px;color:var(--accent-dark);font-weight:600;margin-bottom:10px;text-align:center;"></div>
-            <div id="gps-debug-log" style="display:none;font-size:11px;color:#fff;background:#111;border-radius:8px;padding:8px;margin-bottom:10px;line-height:1.6;word-break:break-all;"></div>
+
             <button id="gps-start-trip-btn" onclick="gpsConfirmStartModal()" style="width:100%;padding:14px;border-radius:14px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;">Start Trip 🚗</button>
             <button onclick="gpsCloseStartModal()" style="width:100%;padding:12px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--text3);cursor:pointer;margin-top:4px;">Cancel</button>
           </div>
