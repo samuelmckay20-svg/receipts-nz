@@ -1374,7 +1374,8 @@ function refreshFY(){
     // FY has rolled over — update everything
     FY=fresh;
     selectedFYYear=FY.startYear;
-    selectedGSTFYYear=FY.startYear;
+    // selectedGSTFYYear is declared in the GST section — guard against hoisting order
+    if(typeof selectedGSTFYYear!=='undefined') selectedGSTFYYear=FY.startYear;
     const fyChip=document.getElementById('fy-chip');
     const fySub=document.getElementById('fy-sub');
     if(fyChip) fyChip.textContent=FY.label;
@@ -3349,6 +3350,7 @@ function deleteMileage(){
 
 /* ── GST PANEL ── */
 var _gstDebounceTimer=null;
+var selectedGSTFYYear=getFY().startYear; // declared here, refreshed by refreshFY()
 function renderGSTDebounced(){
   clearTimeout(_gstDebounceTimer);
   _gstDebounceTimer=setTimeout(function(){
