@@ -1002,10 +1002,16 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
   <div class="img-viewer-top">
     <button class="img-viewer-close" onclick="closeViewer()">✕</button>
   </div>
+  <!-- Raster image viewer -->
   <img class="img-viewer-img" id="img-viewer-img" alt="Receipt" draggable="false">
+  <!-- PDF viewer — renders pages as canvases -->
+  <div id="pdf-viewer-wrap" style="display:none;width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:60px 0 60px;">
+    <div id="pdf-viewer-pages" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 8px;"></div>
+    <div id="pdf-viewer-loading" style="color:white;font-size:14px;text-align:center;padding:40px;">Loading PDF…</div>
+  </div>
   <div class="img-viewer-bottom">
     <div class="img-viewer-caption" id="img-viewer-caption"></div>
-    <div class="img-viewer-sub">Pinch to zoom · Tap ✕ to close</div>
+    <div class="img-viewer-sub" id="img-viewer-sub">Pinch to zoom · Tap ✕ to close</div>
   </div>
 </div>
 
@@ -2197,23 +2203,139 @@ function clearImgEdit(){
 /* ── FULLSCREEN VIEWER ── */
 function viewImg(source,caption){
   let src=null;
+  let receipt=null;
   if(source===null){src=imgData;caption=caption||'Receipt preview';}
   else if(source==='edit'){src=editImgData;const v=document.getElementById('e-vendor').value.trim();caption=v||'Receipt';}
-  else{const r=receipts.find(x=>x.id===source);if(r){src=r.image;caption=r.vendor+' · '+fmtDate(r.date);}}
-  if(!src){showToast('No file to view');return;}
-  // PDFs can't display in an img tag — open in a new browser tab
-  if(src.startsWith('data:application/pdf')){
-    const a=document.createElement('a');
-    a.href=src;a.target='_blank';a.click();
+  else{receipt=receipts.find(x=>x.id===source);if(receipt){src=receipt.image;caption=receipt.vendor+' · '+fmtDate(receipt.date);}}
+
+  // No image — if it's an email receipt show extracted details instead
+  if(!src){
+    if(receipt&&receipt.source==='email'){
+      showEmailReceiptDetails(receipt);
+      return;
+    }
+    showToast('No file attached to this receipt');
     return;
   }
-  document.getElementById('img-viewer-img').src=src;
-  document.getElementById('img-viewer-caption').textContent=caption;
-  document.getElementById('img-viewer').classList.add('open');
+
+  const viewer=document.getElementById('img-viewer');
+  const imgEl=document.getElementById('img-viewer-img');
+  const pdfWrap=document.getElementById('pdf-viewer-wrap');
+  const captionEl=document.getElementById('img-viewer-caption');
+  const subEl=document.getElementById('img-viewer-sub');
+
+  captionEl.textContent=caption;
+  viewer.classList.add('open');
+
+  if(src.startsWith('data:application/pdf')){
+    // Show PDF viewer, hide image
+    imgEl.style.display='none';
+    pdfWrap.style.display='block';
+    subEl.textContent='Scroll to see all pages · Tap ✕ to close';
+    renderPDFInViewer(src);
+  } else {
+    // Show image viewer, hide PDF
+    imgEl.style.display='block';
+    pdfWrap.style.display='none';
+    subEl.textContent='Pinch to zoom · Tap ✕ to close';
+    imgEl.src=src;
+    // Reset zoom/pan
+    imgEl.style.transform='scale(1) translate(0,0)';
+  }
 }
+
+async function renderPDFInViewer(dataUrl){
+  const pagesEl=document.getElementById('pdf-viewer-pages');
+  const loadingEl=document.getElementById('pdf-viewer-loading');
+  pagesEl.innerHTML='';
+  loadingEl.style.display='block';
+  loadingEl.textContent='Loading PDF…';
+  try{
+    if(!window.pdfjsLib){loadingEl.textContent='PDF viewer unavailable';return;}
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const b64=dataUrl.split(',')[1];
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+    const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
+    loadingEl.textContent='Rendering '+pdf.numPages+' page'+(pdf.numPages>1?'s':'')+'…';
+    const viewerW=document.getElementById('pdf-viewer-wrap').clientWidth-16;
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const vp=page.getViewport({scale:1});
+      const scale=Math.min(viewerW/vp.width, 2);
+      const viewport=page.getViewport({scale});
+      const canvas=document.createElement('canvas');
+      canvas.width=viewport.width;
+      canvas.height=viewport.height;
+      canvas.style.cssText='max-width:100%;border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.4);display:block;';
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      pagesEl.appendChild(canvas);
+    }
+    loadingEl.style.display='none';
+  }catch(e){
+    loadingEl.textContent='Could not render PDF: '+e.message;
+    console.warn('PDF viewer error:',e);
+  }
+}
+
+function showEmailReceiptDetails(r){
+  // Show a clean summary sheet for email receipts with no attachment
+  const c=catBy(r.category);
+  const gst=gstForReceipt(r);
+  const existing=document.getElementById('email-detail-overlay');
+  if(existing) existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='email-detail-overlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;';
+  overlay.innerHTML=`
+    <div style="width:100%;background:var(--bg);border-radius:24px 24px 0 0;padding:0 0 var(--safe-bottom);">
+      <div style="width:36px;height:5px;background:var(--fill2);border-radius:3px;margin:14px auto 0;"></div>
+      <div style="padding:16px 20px 12px;border-bottom:0.5px solid var(--sep-l);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:17px;font-weight:700;">${r.vendor}</div>
+          <div style="font-size:13px;color:var(--text3);margin-top:2px;">✉️ From email · ${fmtDate(r.date)}</div>
+        </div>
+        <button onclick="document.getElementById('email-detail-overlay').remove()" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--fill2);font-size:16px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:var(--surface);border-radius:12px;padding:12px;">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Amount</div>
+          <div style="font-size:22px;font-weight:700;color:var(--text1);">$${r.amount.toFixed(2)}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:12px;">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">GST</div>
+          <div style="font-size:22px;font-weight:700;color:var(--orange);">$${gst.toFixed(2)}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:12px;">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Category</div>
+          <div style="font-size:15px;font-weight:600;">${c.icon} ${c.label}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:12px;">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">GST status</div>
+          <div style="font-size:15px;font-weight:600;">${r.gst==='yes'?'✓ Included':r.gst==='partial'?'Partial':'No GST'}</div>
+        </div>
+      </div>
+      ${r.notes?`<div style="margin:0 20px 16px;padding:12px 14px;background:var(--fill3);border-radius:12px;font-size:14px;color:var(--text2);line-height:1.55;">${r.notes}</div>`:''}
+      ${r.suppgst?`<div style="margin:0 20px 16px;font-size:13px;color:var(--text3);">Supplier GST#: ${r.suppgst}</div>`:''}
+      <div style="margin:0 20px 4px;padding:10px 14px;background:rgba(0,122,255,.08);border-radius:10px;font-size:12px;color:var(--blue);line-height:1.5;">
+        📧 Extracted from email body — no attachment was available. Tap Edit to add an image or correct any details.
+      </div>
+      <button onclick="document.getElementById('email-detail-overlay').remove();openEdit(${r.id})" style="display:block;width:calc(100% - 40px);margin:12px 20px 0;padding:14px;border-radius:14px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;">Edit Receipt</button>
+      <div style="height:16px;"></div>
+    </div>`;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  document.body.appendChild(overlay);
+}
+
 function closeViewer(){
   const img=document.getElementById('img-viewer-img');
   img.style.transform='scale(1) translate(0,0)';
+  img.src='';
+  document.getElementById('pdf-viewer-pages').innerHTML='';
+  document.getElementById('pdf-viewer-loading').style.display='none';
+  document.getElementById('img-viewer-img').style.display='block';
+  document.getElementById('pdf-viewer-wrap').style.display='none';
   document.getElementById('img-viewer').classList.remove('open');
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeViewer();});
