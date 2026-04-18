@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2.1.0">
+<meta name="app-version" content="2.1.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -1025,7 +1025,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
 <script>
 /* ── VERSION CHECK ── */
-var APP_VERSION='2.1.0';
+var APP_VERSION='2.1.1';
 (function(){
   try{
     var isStandalone=window.navigator.standalone||window.matchMedia('(display-mode: standalone)').matches;
@@ -3767,6 +3767,66 @@ async function exportPDF(){
   if(exportBtn){exportBtn.disabled=false;exportBtn.textContent='⬆ Export';}
 }
 
+
+/* ── NEW EXPENSE FROM OVERVIEW ── */
+function showNewExpenseSheet(){
+  showActionSheet('New expense', [
+    {label:'📷 Camera — take photo', action:'overviewCamera()'},
+    {label:'🖼️ Photo — from library', action:'document.getElementById(\'ov-file-in\').click()'},
+    {label:'📄 PDF — invoice or doc', action:'document.getElementById(\'ov-pdf-in\').click()'},
+    {label:'✏️ Enter manually', action:'goTab(\'add\')'},
+  ]);
+}
+
+function overviewCamera(){
+  goTab('add');
+  // Small delay so Add tab DOM is visible before camera opens
+  setTimeout(function(){ openCam(); }, 150);
+}
+
+async function overviewFileChosen(e){
+  const f=e.target.files[0]; if(!f) return;
+  e.target.value='';
+  goTab('add');
+  if(isHEICFile(f)){
+    try{
+      showToast('Converting HEIC...');
+      const data=await convertToJpeg(f);
+      const bytes=(data.length-22)*3/4;
+      imgData=bytes>1.5*1024*1024?await compressImage(data,1.5*1024*1024):data;
+      showPreview();
+    }catch(err){ showToast('HEIC conversion failed'); }
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=async function(ev){
+    let data=ev.target.result;
+    const bytes=(data.length-22)*3/4;
+    if(bytes>1.5*1024*1024) data=await compressImage(data,1.5*1024*1024);
+    imgData=data; showPreview();
+  };
+  reader.readAsDataURL(f);
+}
+
+function overviewPDFChosen(e){
+  const f=e.target.files[0];
+  if(!f||f.type!=='application/pdf') return;
+  e.target.value='';
+  goTab('add');
+  const r=new FileReader();
+  r.onload=async function(ev){
+    imgData=ev.target.result;
+    document.getElementById('prev-wrap').style.display='none';
+    document.getElementById('pdf-prev-wrap').style.display='block';
+    document.getElementById('pdf-prev-name').textContent=f.name+' · '+(f.size/1024).toFixed(0)+' KB';
+    await renderPDFPreview(imgData,'pdf-prev-canvas');
+    document.getElementById('retake-row').style.display='block';
+    document.getElementById('ai-btn-wrap').style.display='block';
+    document.getElementById('ai-result').style.display='none';
+    document.getElementById('api-key-setup').style.display=(getApiKey()||localStorage.getItem('nzrt_role')!=='admin')?'none':'block';
+  };
+  r.readAsDataURL(f);
+}
 
 /* ── AUTH ── */
 function showLoginScreen(){
