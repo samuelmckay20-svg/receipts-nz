@@ -569,7 +569,10 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
     <!-- GST PANEL -->
     <div id="p-gst" style="display:none">
-      <div class="shdr">GST filing period</div>
+      <div class="shdr-row">
+        <span class="shdr" style="padding:0;">GST filing period</span>
+        <select id="gst-fy-sel" class="g-select" style="width:auto;font-size:13px;color:var(--blue);" onchange="onGSTFYChange()"></select>
+      </div>
       <div class="period-scroll" id="period-scroll"></div>
 
       <div class="exp-row" id="period-exp-row" style="display:none">
@@ -594,7 +597,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
           <div class="g-icon" style="background:rgba(52,199,89,.1)">💰</div>
           <span class="g-lbl" id="income-total-lbl">Your fees (ex. GST)</span>
           <span style="font-size:17px;color:var(--text1);flex-shrink:0;">$</span>
-          <input class="g-input" type="number" id="income-total" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="if(document.getElementById('p-gst').style.display!=='none')renderGST()" >
+          <input class="g-input" type="number" id="income-total" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="renderGSTDebounced()" >
         </div>
         <div class="g-row">
           <div class="g-icon" style="background:rgba(255,149,0,.1)">🧾</div>
@@ -606,7 +609,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
           <div class="g-icon" style="background:rgba(0,122,255,.1)">📊</div>
           <span class="g-lbl">Zero-rated</span>
           <span style="font-size:17px;color:var(--text1);flex-shrink:0;">$</span>
-          <input class="g-input" type="number" id="income-zero" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="if(document.getElementById('p-gst').style.display!=='none')renderGST()" >
+          <input class="g-input" type="number" id="income-zero" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="renderGSTDebounced()" >
         </div>
       </div>
       <div class="gst-note-box" style="margin:0 16px 12px;" id="income-hint">Enter your fee total (before GST). GST collected = fees × 15%. Zero-rated applies to exports or exempt supplies.</div>
@@ -1358,21 +1361,43 @@ function getAvailableFYs(){
   });
   return Array.from(years).sort(function(a,b){return b-a;}).map(getFYForYear);
 }
-const FY=getFY();
+// FY is computed fresh each time it's accessed so it never goes stale
+// across midnight or the April 1 financial year rollover.
+// All code uses getFY() directly; this variable is kept for legacy references
+// and refreshed via refreshFY() which is called on tab switch and periodically.
+var FY=getFY();
 var selectedFYYear=FY.startYear;
 
+function refreshFY(){
+  const fresh=getFY();
+  if(fresh.startYear!==FY.startYear){
+    // FY has rolled over — update everything
+    FY=fresh;
+    selectedFYYear=FY.startYear;
+    selectedGSTFYYear=FY.startYear;
+    const fyChip=document.getElementById('fy-chip');
+    const fySub=document.getElementById('fy-sub');
+    if(fyChip) fyChip.textContent=FY.label;
+    if(fySub) fySub.textContent=FY.range;
+    updateStats();
+    console.log('FY rolled over to',FY.label);
+  } else {
+    FY=fresh; // always keep fresh even if year hasn't changed
+  }
+}
+
 /* ── GST PERIODS ── */
-function buildGSTPeriods(){
+function buildGSTPeriods(fyOverride){
+  const fy=fyOverride||getFY();
   const months=parseInt(settings.gstperiod)||2;
-  // build list of periods within current FY (Apr to Mar)
   const periods=[];
-  let d=new Date(FY.start);
-  while(d<=FY.end){
+  let d=new Date(fy.start);
+  while(d<=fy.end){
     const start=new Date(d);
     const end=new Date(d);
     end.setMonth(end.getMonth()+months);
-    end.setDate(0); // last day of previous month
-    if(end>FY.end)end.setTime(FY.end.getTime());
+    end.setDate(0);
+    if(end>fy.end)end.setTime(fy.end.getTime());
     periods.push({start:new Date(start),end:new Date(end)});
     d.setMonth(d.getMonth()+months);
   }
@@ -1624,7 +1649,7 @@ function renderOverview(){
   if(!maxMonth) maxMonth=1;
 
   // GST next filing
-  var periods=buildGSTPeriods();
+  var periods=buildGSTPeriods(getFY());
   var todayD=new Date();
   var nextPeriod=selFY.startYear===getFY().startYear?periods.find(function(p){return p.end>=todayD;}):null;
   var daysUntilDue=0;
@@ -1805,6 +1830,7 @@ function buildDonutChart(catPairs, total){
 
 
 function goTab(t){
+  refreshFY(); // keep FY current across midnight and Apr 1 rollover
   ['overview','add','list','mile','gst'].forEach(function(n){
     var panel=document.getElementById('p-'+n);
     var tabBtn=document.getElementById('t-'+n);
@@ -2495,7 +2521,7 @@ async function analyseReceipt(){
 
     const ANTHROPIC_URL='https://api.anthropic.com/v1/messages';
     const reqBody=JSON.stringify({
-      model:'claude-opus-4-5-20251101',max_tokens:1000,
+      model:'claude-opus-4-6',max_tokens:1000,
       messages:[{role:'user',content:[
         fileBlock,
         {type:'text',text:`Analyse this New Zealand receipt image carefully. Look for the merchant name, total amount, date, invoice/receipt number, and the supplier's GST number (usually printed as "GST No." or "IRD No." or "NZBN").
@@ -2588,7 +2614,7 @@ function saveReceipt(){
     notes:document.getElementById('f-notes').value.trim(),
     reconciled:document.getElementById('f-recon').checked,
     claimPct:document.getElementById('f-claimpct').value!==''?parseFloat(document.getElementById('f-claimpct').value):null,
-    category:selCat,image:imgData
+    category:selCat,image:imgData,source:'manual'
   });
   save();updateStats();
   ['f-vendor','f-amount','f-notes','f-invoice','f-suppgst'].forEach(id=>{
@@ -2640,7 +2666,8 @@ function saveEdit(){
     reconciled:document.getElementById('e-recon').checked,
     claimPct:document.getElementById('e-claimpct').value!==''?parseFloat(document.getElementById('e-claimpct').value):null,
     notes:document.getElementById('e-notes').value.trim(),
-    category:editCat,image:editImgData};
+    category:editCat,image:editImgData,
+    source:receipts[idx].source||'manual'};
   save();updateStats();closeModal('edit');renderList();
 }
 /* ── LONG PRESS ── */
@@ -2950,13 +2977,6 @@ function gpsOdoPhotoAction(){
   if(el) el.click();
 }
 
-function gpsOdoManualAction(){
-  var val=prompt('Enter starting odometer reading (km):');
-  if(val===null) return;
-  var num=parseFloat(val.replace(/[^0-9.]/g,''));
-  if(isNaN(num)||num<=0){showToast('Please enter a valid odometer reading');return;}
-  gpsDoStart(num, null);
-}
 
 function gpsCloseStartModal(){
   document.getElementById('gps-start-modal').classList.remove('open');
@@ -3143,7 +3163,6 @@ async function gpsConfirmEnd(){
     var endCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
     var km=null;
     var endAddress=await reverseGeocode(endCoords.lat,endCoords.lon);
-    // Use GPS road distance — rounded to whole km
     if(gpsTrip.startCoords){
       var rawKm=await getRoadDistanceKm(gpsTrip.startCoords.lat,gpsTrip.startCoords.lon,endCoords.lat,endCoords.lon);
       km=rawKm?Math.round(rawKm):null;
@@ -3151,15 +3170,16 @@ async function gpsConfirmEnd(){
     var date=new Date().toISOString().split('T')[0];
     var startAddr=gpsTrip.startAddress||'';
     var startOdo=gpsTrip.startOdo;
-    // Auto-calculate end odometer from start odo + km
     var endOdo=(startOdo&&km)?(startOdo+km):null;
-    // Clear trip
+
+    // Only clear trip state AFTER we have a successful result
     gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
     localStorage.removeItem('nzrt_gps_trip');
     var banner=document.getElementById('gps-active-banner');
     var trackBtn=document.getElementById('gps-track-btn');
     if(banner) banner.style.display='none';
     if(trackBtn) trackBtn.style.display='block';
+
     // Pre-fill trip modal
     editMileId=null;
     document.getElementById('mile-modal-title').textContent='Add Trip';
@@ -3174,9 +3194,49 @@ async function gpsConfirmEnd(){
     document.getElementById('mile-bg').classList.add('open');
     setTimeout(function(){document.getElementById('modal-mile').classList.add('open');},10);
     showToast(km?'Trip: '+km+' km — add purpose and save':'Trip logged — check details and save');
-  },function(){
-    showToast('Could not get arrival location — please log trip manually');
+
+  },function(err){
+    // Location failed — trip is still active, give user options
+    console.warn('GPS arrival location failed:',err.message);
+    showGPSFailureOptions();
   },{enableHighAccuracy:true,timeout:15000});
+}
+
+function showGPSFailureOptions(){
+  // Trip is still alive — show action sheet with recovery options
+  showActionSheet('Could not get arrival location', [
+    {label:'🔄 Try again', action:'gpsShowEndModal()'},
+    {label:'✏️ Enter trip details manually', action:'gpsEndManually()'},
+    {label:'🚫 Cancel trip', action:'gpsCancelTrip()', danger:true},
+  ]);
+}
+
+function gpsEndManually(){
+  // Clear trip state and open a blank trip modal pre-filled with what we know
+  var startAddr=gpsTrip.startAddress||'';
+  var startOdo=gpsTrip.startOdo;
+  var date=new Date().toISOString().split('T')[0];
+
+  gpsTrip={active:false,startOdo:null,startAddress:'',startImg:null};
+  localStorage.removeItem('nzrt_gps_trip');
+  var banner=document.getElementById('gps-active-banner');
+  var trackBtn=document.getElementById('gps-track-btn');
+  if(banner) banner.style.display='none';
+  if(trackBtn) trackBtn.style.display='block';
+
+  editMileId=null;
+  document.getElementById('mile-modal-title').textContent='Add Trip';
+  document.getElementById('m-date').value=date;
+  document.getElementById('m-from').value=startAddr;
+  document.getElementById('m-to').value='';
+  document.getElementById('m-km').value='';
+  document.getElementById('m-odo-start').value=startOdo||'';
+  document.getElementById('m-odo-end').value='';
+  document.getElementById('m-purpose').value='';
+  document.getElementById('mile-del-btn').style.display='none';
+  document.getElementById('mile-bg').classList.add('open');
+  setTimeout(function(){document.getElementById('modal-mile').classList.add('open');},10);
+  showToast('Enter your destination and distance manually');
 }
 
 function gpsCancelTrip(){
@@ -3288,6 +3348,26 @@ function deleteMileage(){
 }
 
 /* ── GST PANEL ── */
+var _gstDebounceTimer=null;
+function renderGSTDebounced(){
+  clearTimeout(_gstDebounceTimer);
+  _gstDebounceTimer=setTimeout(function(){
+    if(document.getElementById('p-gst').style.display!=='none') renderGST();
+  },400);
+}
+
+function onGSTFYChange(){
+  const sel=document.getElementById('gst-fy-sel');
+  if(!sel) return;
+  selectedGSTFYYear=parseInt(sel.value);
+  selPeriodIdx=0;
+  // Clear income fields when changing FY
+  document.getElementById('income-total').value='';
+  document.getElementById('income-zero').value='';
+  document.getElementById('income-gst').value='';
+  renderGST();
+}
+
 function renderGST(){
   // Guard: only run if GST panel elements are accessible
   const incomeModeEl=document.getElementById('income-mode');
@@ -3296,7 +3376,21 @@ function renderGST(){
   if(!incomeModeEl||!periodScrollEl||!gstWrapEl) return;
 
   try{
-  const periods=buildGSTPeriods();
+  // Populate FY selector with all years that have data
+  const availFYs=getAvailableFYs();
+  const fySelEl=document.getElementById('gst-fy-sel');
+  if(fySelEl){
+    // Preserve selection or default to current FY
+    if(!availFYs.find(f=>f.startYear===selectedGSTFYYear)){
+      selectedGSTFYYear=getFY().startYear;
+    }
+    fySelEl.innerHTML=availFYs.map(f=>
+      `<option value="${f.startYear}"${f.startYear===selectedGSTFYYear?' selected':''}>${f.label}</option>`
+    ).join('');
+  }
+
+  const selFY=getFYForYear(selectedGSTFYYear);
+  const periods=buildGSTPeriods(selFY);
   if(selPeriodIdx>=periods.length)selPeriodIdx=periods.length-1;
   if(selPeriodIdx<0)selPeriodIdx=0;
 
@@ -3394,11 +3488,11 @@ function renderGST(){
   const missingGST=pR.filter(r=>r.amount>50&&!r.suppgst);
   const incomplete=pR.filter(r=>!r.notes||!r.notes.trim());
 
-  // Income tax deductions — full FY scope (not per GST period)
-  const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+  // Income tax deductions — full selected FY scope (not per GST period)
+  const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;});
   const fyClaimable=fyR.reduce((s,r)=>s+claimableForReceipt(r),0);
   const fyEntCount=fyR.filter(r=>CATS.find(c=>c.id===r.category&&c.entertainment)).length;
-  const fyMileAll=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=FY.start&&d<=FY.end;}).sort((a,b)=>a.date.localeCompare(b.date));
+  const fyMileAll=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;}).sort((a,b)=>a.date.localeCompare(b.date));
   const fyKm=fyMileAll.reduce((s,m)=>s+m.km,0);
   let cumKmFY=0;
   const fyMileVal=fyMileAll.reduce((s,m)=>{const v=calcMileValue(m.km,cumKmFY);cumKmFY+=m.km;return s+v;},0);
@@ -3428,7 +3522,7 @@ function renderGST(){
     </div>
 
     <div class="gst-return-card">
-      <div class="gst-section-hdr">Income tax deductions — ${FY.label} (full year)</div>
+      <div class="gst-section-hdr">Income tax deductions — ${selFY.label} (full year)</div>
       <div class="gst-line">
         <span class="lbl">Business expenses (claimable portion)</span>
         <span class="val">$${fyClaimable.toFixed(2)}</span>
@@ -3443,7 +3537,7 @@ function renderGST(){
         <span class="val">$${(fyClaimable+fyMileVal).toFixed(2)}</span>
       </div>
     </div>
-    <div class="gst-note-box" style="margin:0 16px 8px;">ⓘ Mileage uses the IRD km rate and is an <strong>income tax deduction only</strong> — it does not appear on your GST return. Income tax deductions are shown for the full financial year (${FY.range}), not just this GST period.</div>
+    <div class="gst-note-box" style="margin:0 16px 8px;">ⓘ Mileage uses the IRD km rate and is an <strong>income tax deduction only</strong> — it does not appear on your GST return. Income tax deductions are shown for the full financial year (${selFY.range}), not just this GST period.</div>
 
     ${notRecon>0?`<div class="warn-banner" style="margin:0 16px 10px;">
       <span class="warn-icon">⚠️</span>
@@ -3474,12 +3568,12 @@ function renderGST(){
     </div>
   `;
 
-  // Charts
-  const chartFyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
+  // Charts — use the selected FY, not the hardcoded current FY
+  const chartFyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;});
   const months=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
   const now=new Date();
   const mT=months.map((m,i)=>{
-    const mi=(i+3)%12,my=mi<3?FY.start.getFullYear()+1:FY.start.getFullYear();
+    const mi=(i+3)%12,my=mi<3?selFY.start.getFullYear()+1:selFY.start.getFullYear();
     const sum=chartFyR.filter(r=>{const d=new Date(r.date+'T12:00:00');return d.getMonth()===mi&&d.getFullYear()===my;}).reduce((s,r)=>s+r.amount,0);
     return{m,sum,cur:mi===now.getMonth()&&my===now.getFullYear()};
   });
@@ -3497,6 +3591,10 @@ function renderGST(){
 
 function selPeriod(i){
   selPeriodIdx=i;
+  // Clear income fields when switching periods — they are period-specific
+  document.getElementById('income-total').value='';
+  document.getElementById('income-zero').value='';
+  document.getElementById('income-gst').value='';
   renderGST();
   document.getElementById('period-exp-row').style.display='flex';
 }
@@ -3516,7 +3614,7 @@ function buildCSVForPeriod(period){
 }
 
 function getPeriodLabel(){
-  const periods=buildGSTPeriods();
+  const periods=buildGSTPeriods(getFYForYear(selectedGSTFYYear));
   const p=periods[selPeriodIdx];
   if(!p)return'period';
   const s=p.start,e=p.end;
@@ -3524,7 +3622,7 @@ function getPeriodLabel(){
 }
 
 function exportPeriodCSV(){
-  const periods=buildGSTPeriods();
+  const periods=buildGSTPeriods(getFYForYear(selectedGSTFYYear));
   const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
   const {csv,receipts:pR}=buildCSVForPeriod(period);
   if(!pR.length){showToast('No receipts in this period');return;}
@@ -3535,7 +3633,7 @@ function exportPeriodCSV(){
 }
 
 async function exportPeriodZip(){
-  const periods=buildGSTPeriods();
+  const periods=buildGSTPeriods(getFYForYear(selectedGSTFYYear));
   const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
   const {csv,receipts:pR}=buildCSVForPeriod(period);
   if(!pR.length){showToast('No receipts in this period');return;}
@@ -3865,7 +3963,7 @@ function hexToRgb(hex){
 }
 
 async function exportPeriodPDF(){
-  const periods=buildGSTPeriods();
+  const periods=buildGSTPeriods(getFYForYear(selectedGSTFYYear));
   const period=periods[selPeriodIdx];if(!period){showToast('Select a period first');return;}
   const {receipts:pR}=buildCSVForPeriod(period);
   if(!pR.length){showToast('No receipts in this period');return;}
@@ -4472,6 +4570,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const fySub=document.getElementById('fy-sub');
   if(fyChip) fyChip.textContent=FY.label;
   if(fySub) fySub.textContent=FY.range;
+
+  // Check for FY rollover every hour — catches midnight and Apr 1 without
+  // requiring a page reload for users who leave the app open all day
+  setInterval(refreshFY, 60 * 60 * 1000);
   // Set default dates
   const today=new Date().toISOString().split('T')[0];
   const fDate=document.getElementById('f-date');
