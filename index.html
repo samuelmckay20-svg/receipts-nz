@@ -1194,12 +1194,19 @@ async function syncToServer(){
       if(data&&data.token) localStorage.setItem('nzrt_token', data.token);
     } else if(res.status===401){
       setSyncStatus('Session expired — please sign in again', false);
-      // Stash current local data so it survives re-login
+      // Stash current local data so it survives re-login by the SAME user
       if(receipts.length) localStorage.setItem('nzrt_pending_r', JSON.stringify(receipts));
       if(mileage.length) localStorage.setItem('nzrt_pending_m', JSON.stringify(mileage));
       localStorage.removeItem('nzrt_token');
       localStorage.removeItem('nzrt_username');
       localStorage.removeItem('nzrt_role');
+      // Clear local data cache so a different user can't see it on the login screen
+      localStorage.removeItem('nzrt5_r');
+      localStorage.removeItem('nzrt5_m');
+      localStorage.removeItem('nzrt5_s');
+      localStorage.removeItem('nzrt5_bin');
+      receipts=[];mileage=[];bin=[];
+      updateStats();renderList();
       showLoginScreen();
     } else {
       setSyncStatus('Sync failed: '+res.status, false);
@@ -1222,9 +1229,16 @@ async function loadFromServer(){
       localStorage.removeItem('nzrt_token');
       localStorage.removeItem('nzrt_username');
       localStorage.removeItem('nzrt_role');
-      // Stash local-only data so it survives re-login
+      // Stash local-only data so it survives re-login by the SAME user
       if(localReceipts.length) localStorage.setItem('nzrt_pending_r', JSON.stringify(localReceipts));
       if(localMileage.length) localStorage.setItem('nzrt_pending_m', JSON.stringify(localMileage));
+      // Clear local data cache
+      localStorage.removeItem('nzrt5_r');
+      localStorage.removeItem('nzrt5_m');
+      localStorage.removeItem('nzrt5_s');
+      localStorage.removeItem('nzrt5_bin');
+      receipts=[];mileage=[];bin=[];
+      updateStats();renderList();
       showLoginScreen();
       return false;
     }
@@ -4266,10 +4280,23 @@ async function doLogin(){
 
 function doLogout(){
   if(!confirm('Sign out?')) return;
+  // Clear auth
   localStorage.removeItem('nzrt_token');
   localStorage.removeItem('nzrt_username');
   localStorage.removeItem('nzrt_role');
+  // Clear all local data so it doesn't bleed into the next user's session
+  localStorage.removeItem('nzrt5_r');
+  localStorage.removeItem('nzrt5_m');
+  localStorage.removeItem('nzrt5_s');
+  localStorage.removeItem('nzrt5_bin');
+  localStorage.removeItem('nzrt_pending_r');
+  localStorage.removeItem('nzrt_pending_m');
+  localStorage.removeItem('nzrt_gps_trip');
+  localStorage.removeItem('nzrt_last_sync');
+  // Reset in-memory state
   receipts=[];mileage=[];bin=[];
+  settings={bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37,customCats:[]};
+  refreshCats();
   updateStats();renderList();
   closeModal('settings');
   showLoginScreen();
