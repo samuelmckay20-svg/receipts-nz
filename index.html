@@ -1298,17 +1298,18 @@ function save(){
     localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
     localStorage.setItem('nzrt5_s',JSON.stringify(settings));
     localStorage.setItem('nzrt5_bin',JSON.stringify(bin));
-    // Warn if local storage is getting large (images are the main culprit)
+    // Only warn based on this app's own keys — don't count other sites' data
     try{
-      const used=Object.keys(localStorage).reduce((s,k)=>s+(localStorage.getItem(k)||'').length,0);
-      const usedMB=(used*2/1024/1024).toFixed(1); // UTF-16 = 2 bytes/char
-      if(used>3*1024*1024){ // warn above ~3MB
-        setSyncStatus(`⚠️ Local storage ${usedMB}MB — Synology backup recommended`,false);
+      const appKeys=['nzrt5_r','nzrt5_m','nzrt5_s','nzrt5_bin'];
+      const used=appKeys.reduce((s,k)=>s+(localStorage.getItem(k)||'').length,0);
+      const usedMB=(used*2/1024/1024).toFixed(1);
+      if(used>8*1024*1024){ // warn above ~8MB — server sync means local cache rarely needs to be large
+        setSyncStatus(`⚠️ Local cache ${usedMB}MB — tap 🔄 to sync and free space`,false);
       }
     }catch(e){}
   }catch(e){
     if(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'){
-      showToast('⚠️ Storage full! Delete old receipts or clear images to free space.');
+      showToast('⚠️ Local cache full — tap 🔄 to sync, then the app will free space automatically.');
     }
   }
   // Sync to Synology in background — don't await so UI stays fast
