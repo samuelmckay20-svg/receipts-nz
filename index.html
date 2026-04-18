@@ -2761,19 +2761,25 @@ function gpsOdoPhoto(which){
 
 function gpsOdoStartPhotoChosen(e){
   var f=e.target.files[0];if(!f)return;
+  gpsShowLoading('Loading photo...');
   var reader=new FileReader();
   reader.onload=function(ev){
-    document.getElementById('gps-odo-start-img-prev').src=ev.target.result;
-    document.getElementById('gps-odo-start-preview').style.display='block';
+    gpsHideLoading();
+    // Show preview
+    var prev=document.getElementById('gps-odo-start-preview');
+    var img=document.getElementById('gps-odo-start-img-prev');
+    if(img) img.src=ev.target.result;
+    if(prev) prev.style.display='block';
+    // Scan
     gpsScanOdometer(ev.target.result, function(num){
       if(num){
         var el=document.getElementById('gps-odo-start');
         if(el) el.value=num;
         var s=document.getElementById('gps-odo-scan-status');
-        if(s){s.style.display='block';s.textContent='✓ Read: '+num+' km — correct if needed then tap Start Trip';}
+        if(s){s.style.display='block';s.textContent='✓ Read: '+num+' km — correct if needed';}
       } else {
         var s=document.getElementById('gps-odo-scan-status');
-        if(s){s.style.display='block';s.textContent='Could not read — please enter manually';}
+        if(s){s.style.display='block';s.textContent='Could not read — please enter manually above';}
       }
     });
   };
@@ -2806,56 +2812,55 @@ function gpsDoStart(odo, imgData){
   showToast('Trip started — drive safely! 🚗');
 }
 
+function gpsShowLoading(msg){
+  var el=document.getElementById('gps-loading');
+  var msgEl=document.getElementById('gps-loading-msg');
+  if(el){el.style.display='flex';}
+  if(msgEl) msgEl.textContent=msg||'Please wait...';
+}
+
+function gpsHideLoading(){
+  var el=document.getElementById('gps-loading');
+  if(el) el.style.display='none';
+}
+
 function gpsScanOdometer(imgData, callback){
   var key=getApiKey();
-  showToast('🔍 Reading odometer...');
   if(!key){
-    // No API key — ask manually
-    var val=prompt('Could not auto-read. Enter odometer reading (km):');
-    var num=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
-    callback((!isNaN(num)&&num>0)?num:null);
+    callback(null);
     return;
   }
-  try{
-    var base64=imgData.split(',')[1];
-    var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
-    var body=JSON.stringify({
-      model:'claude-sonnet-4-20250514',
-      max_tokens:100,
-      messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-        {type:'text',text:'Look at this odometer photo carefully. The odometer shows a number in km or km/h digits. Read ONLY the main odometer digits (the large number showing total distance travelled, not the trip meter). Return ONLY the integer number with no units, commas, spaces or other text. For example: 87432. If the image is too blurry or unclear to read confidently, respond with just the word unclear.'}
-      ]}]
-    });
-    var controller=new AbortController();
-    setTimeout(function(){controller.abort();},10000);
-    fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:body,
-      signal:controller.signal
-    }).then(function(res){return res.json();})
-    .then(function(data){
-      var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
-      var num=parseFloat(text.replace(/[^0-9.]/g,''));
-      if(!isNaN(num)&&num>0){
-        showToast('✓ Odometer read: '+Math.round(num)+' km');
-        callback(Math.round(num));
-      } else {
-        var val=prompt('Could not read odometer clearly. Please enter reading (km):');
-        var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
-        callback((!isNaN(n)&&n>0)?n:null);
-      }
-    }).catch(function(){
-      var val=prompt('Scan failed. Please enter odometer reading (km):');
-      var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
-      callback((!isNaN(n)&&n>0)?n:null);
-    });
-  }catch(err){
-    var val=prompt('Enter odometer reading (km):');
-    var n=val?parseFloat(val.replace(/[^0-9.]/g,'')):null;
-    callback((!isNaN(n)&&n>0)?n:null);
-  }
+  gpsShowLoading('Reading odometer...');
+  var base64=imgData.split(',')[1];
+  var mediaType=imgData.split(';')[0].split(':')[1]||'image/jpeg';
+  var body=JSON.stringify({
+    model:'claude-sonnet-4-20250514',
+    max_tokens:50,
+    messages:[{role:'user',content:[
+      {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+      {type:'text',text:'What is the odometer reading in this photo? Return only the number (e.g. 87432). No units, no text. If unclear, return 0.'}
+    ]}]
+  });
+  var controller=new AbortController();
+  var timeout=setTimeout(function(){controller.abort();},12000);
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:body,
+    signal:controller.signal
+  }).then(function(res){
+    clearTimeout(timeout);
+    return res.json();
+  }).then(function(data){
+    gpsHideLoading();
+    var text=(data.content&&data.content[0]&&data.content[0].text||'').trim();
+    var num=parseInt(text.replace(/[^0-9]/g,''),10);
+    callback((num&&num>0)?num:null);
+  }).catch(function(){
+    clearTimeout(timeout);
+    gpsHideLoading();
+    callback(null);
+  });
 }
 
 function gpsOdoEndPhotoChosen(e){
@@ -3989,5 +3994,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
       </div>
+<!-- GPS Loading overlay -->
+<div id="gps-loading" style="display:none;position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,0.7);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div id="gps-loading-msg" style="color:white;font-size:15px;font-weight:600;text-align:center;padding:0 32px;"></div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
 </body>
 </html>
