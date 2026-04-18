@@ -2719,9 +2719,17 @@ function gpsShowStartModal(){
   var el=document.getElementById('gps-odo-start');
   if(el) el.value='';
   var status=document.getElementById('gps-odo-scan-status');
-  if(status){status.style.display='none';status.textContent='';}
-  var dbg=document.getElementById('gps-debug-log');
-  if(dbg){dbg.style.display='none';dbg.innerHTML='';}  var prev=document.getElementById('gps-odo-start-preview');
+  if(status){
+    if(!getApiKey()){
+      status.style.display='block';
+      status.style.color='var(--red)';
+      status.textContent='⚠️ No API key set — go to Settings to add your Anthropic API key. You can still enter the odometer manually.';
+    } else {
+      status.style.display='none';
+      status.textContent='';
+    }
+  }
+  var prev=document.getElementById('gps-odo-start-preview');
   if(prev) prev.style.display='none';
   document.getElementById('gps-start-bg').classList.add('open');
   setTimeout(function(){document.getElementById('gps-start-modal').classList.add('open');},10);
