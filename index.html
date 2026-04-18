@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2.1.4">
+<meta name="app-version" content="2.2.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -503,6 +503,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         <button class="exp-btn" onclick="openExportSheet()" style="background:rgba(0,122,255,.1);color:var(--blue);">⬆ Export</button>
         <button class="exp-btn" onclick="openBin()" style="background:rgba(255,59,48,.1);color:var(--red);">🗑 Bin</button>
         <div style="flex:1;"></div>
+        <button onclick="showQuickAdd()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;border:none;background:var(--fill2);color:var(--text2);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">⚡ Quick</button>
         <button onclick="goTab('add')" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:none;background:var(--accent);color:white;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">＋ Receipt</button>
       </div>
       <div id="r-list"></div>
@@ -828,6 +829,22 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;" id="sync-status">Not configured — enter your Synology URL and secret to enable automatic backup.</div>
+
+    <div class="shdr">Email forwarding</div>
+    <div class="g-list">
+      <div class="g-row" style="flex-direction:column;align-items:flex-start;gap:8px;padding:14px 16px;">
+        <div style="font-size:13px;color:var(--text2);line-height:1.5;">Forward receipts from your email to this address and they'll be automatically scanned and added to your receipts.</div>
+        <div style="display:flex;align-items:center;gap:8px;width:100%;">
+          <div id="email-fwd-address" style="flex:1;font-size:12px;font-family:monospace;color:var(--blue);background:var(--fill2);padding:9px 12px;border-radius:10px;word-break:break-all;min-height:36px;"></div>
+          <button onclick="copyEmailAddress()" style="padding:9px 14px;border-radius:10px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;">Copy</button>
+        </div>
+        <div style="display:flex;gap:8px;width:100%;">
+          <button onclick="showEmailLog()" style="flex:1;padding:9px;border-radius:10px;border:none;background:var(--fill2);color:var(--text2);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;">📋 View email log</button>
+          <button onclick="regenerateEmailToken()" style="flex:1;padding:9px;border-radius:10px;border:none;background:rgba(255,59,48,.08);color:var(--red);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;">↺ New address</button>
+        </div>
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 12px;">Forward email receipts, invoices, or anything with a $ amount to your unique address. Attachments (PDF, JPEG) are scanned too. Requires ANTHROPIC_API_KEY in start.sh.</div>
     </div><!-- end admin-only -->
     <div class="shdr">Your business</div>
     <div class="g-list">
@@ -897,6 +914,21 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;">2024–25 IRD Tier 1 rates (first 14,000 km): Petrol $1.17 · Diesel $1.26 · Hybrid $0.86 · Electric $1.08. Tier 2 (beyond 14,000 km): Petrol $0.37 · Diesel $0.35 · Hybrid $0.21 · Electric $0.19.</div>
+
+    <div class="shdr">Custom categories</div>
+    <div id="custom-cats-list" style="margin:0 16px 8px;"></div>
+    <div style="margin:0 16px 8px;background:var(--surface);border-radius:16px;overflow:hidden;">
+      <div style="padding:12px 16px 4px;font-size:12px;color:var(--text3);">New category</div>
+      <div style="display:grid;grid-template-columns:48px 1fr auto;gap:0;border-top:0.5px solid var(--sep-l);">
+        <input type="text" id="s-cat-icon" placeholder="🏷️" maxlength="2"
+          style="padding:12px;border:none;background:none;font-size:20px;text-align:center;outline:none;font-family:inherit;">
+        <input type="text" id="s-cat-label" placeholder="Category name"
+          style="padding:12px 8px;border:none;border-left:0.5px solid var(--sep-l);background:none;font-family:inherit;font-size:15px;color:var(--text1);outline:none;">
+        <button onclick="addCustomCat()" style="padding:12px 16px;border:none;border-left:0.5px solid var(--sep-l);background:none;font-family:inherit;font-size:14px;font-weight:700;color:var(--blue);cursor:pointer;white-space:nowrap;">Add</button>
+      </div>
+    </div>
+    <div class="gst-note-box" style="margin:0 16px 12px;">Custom categories appear alongside built-in ones. Existing receipts keep their category if you delete a custom one.</div>
+
     <button class="save-btn" onclick="saveSettings()">Save Settings</button>
     <div class="pb"></div>
   </div>
@@ -1050,7 +1082,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
 <script>
 /* ── VERSION CHECK ── */
-var APP_VERSION='2.1.4';
+var APP_VERSION='2.2.0';
 (function(){
   try{
     var isStandalone=window.navigator.standalone||window.matchMedia('(display-mode: standalone)').matches;
@@ -1070,7 +1102,7 @@ var APP_VERSION='2.1.4';
 })();
 
 /* ── DATA ── */
-const CATS=[
+const BUILT_IN_CATS=[
   {id:'meals',       label:'Meals & Ent.',    icon:'☕',color:'#FF2D78',entertainment:true},
   {id:'motor',       label:'Motor vehicle',   icon:'🚗',color:'#007AFF',entertainment:false},
   {id:'travel',      label:'Travel & accom.', icon:'✈️',color:'#5AC8FA',entertainment:false},
@@ -1083,6 +1115,15 @@ const CATS=[
   {id:'marketing',   label:'Advertising',     icon:'📣',color:'#BF5AF2',entertainment:false},
   {id:'other',       label:'Other',           icon:'📁',color:'#8E8E93',entertainment:false},
 ];
+// CATS is now computed — always built-ins + user custom cats
+// Access via allCats() so custom cats are always current
+function allCats(){
+  const custom=(settings.customCats||[]);
+  return [...BUILT_IN_CATS,...custom];
+}
+// Legacy alias used throughout existing code — returns current full list
+var CATS=BUILT_IN_CATS; // updated after settings load via refreshCats()
+function refreshCats(){ CATS=allCats(); }
 
 let receipts=[], mileage=[], bin=[], selCat='other', editCat='other';
 let imgData=null, editImgData=null, editId=null, editMileId=null;
@@ -1096,7 +1137,8 @@ function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):
 receipts=load('nzrt5_r',[]);
 mileage=load('nzrt5_m',[]);
 bin=load('nzrt5_bin',[]);
-settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37},load('nzrt5_s',{}));
+settings=Object.assign({bizname:'',gstn:'',gstperiod:'2',gstbasis:'invoice',vehicle:'',fueltype:'petrol',milerate:1.17,milerate2:0.37,customCats:[]},load('nzrt5_s',{}));
+refreshCats(); // merge custom cats into CATS
 
 /* ── SYNOLOGY SYNC ── */
 // ── SERVER CONFIG (pre-configured — users only need username/password) ──
@@ -1791,6 +1833,8 @@ function openSettings(){
     const syncSecretEl=document.getElementById('s-sync-secret');
     if(syncUrlEl) syncUrlEl.value=sc.url;
     if(syncSecretEl) syncSecretEl.value=sc.secret;
+    // Load email forwarding address asynchronously
+    loadEmailForwardingAddress();
   }
   document.getElementById('s-bizname').value=settings.bizname;
   document.getElementById('s-gstn').value=formatGSTNum(settings.gstn||'');
@@ -1802,6 +1846,7 @@ function openSettings(){
   document.getElementById('s-milerate2').value=settings.milerate2;
   document.getElementById('settings-bg').classList.add('open');
   setTimeout(()=>document.getElementById('modal-settings').classList.add('open'),10);
+  renderCustomCatsList();
 }
 function updateMileRateFromType(){
   const t=document.getElementById('s-fueltype').value;
@@ -1834,11 +1879,14 @@ function saveSettings(){
     if(syncSecret) localStorage.setItem('nzrt_sync_secret',syncSecret);
   }
   save();closeModal('settings');showToast('Settings saved');
+  refreshCats();
   updateStats();
 }
 
 /* ── MODALS ── */
 function closeModal(which){
+  if(which==='quickadd'){document.getElementById('modal-quickadd').classList.remove('open');document.getElementById('quickadd-bg').classList.remove('open');}
+  if(which==='emaillog'){document.getElementById('modal-emaillog').classList.remove('open');document.getElementById('emaillog-bg').classList.remove('open');}
   if(which==='edit'){document.getElementById('modal-edit').classList.remove('open');document.getElementById('modal-bg').classList.remove('open');editId=null;}
   if(which==='settings'){document.getElementById('modal-settings').classList.remove('open');document.getElementById('settings-bg').classList.remove('open');}
   if(which==='mile'){document.getElementById('modal-mile').classList.remove('open');document.getElementById('mile-bg').classList.remove('open');editMileId=null;}
@@ -2613,6 +2661,7 @@ function renderList(){
           <span class="r-badge" style="background:${c.color}22;color:${c.color}">${c.icon} ${c.label}</span>
           ${gst>0?`<span class="r-badge" style="background:rgba(255,149,0,.12);color:var(--orange)">GST $${gst.toFixed(2)}</span>`:''}
           ${isEnt?`<span class="r-badge" style="background:rgba(255,59,48,.1);color:var(--red)">50% rule</span>`:''}
+          ${r.source==='email'?`<span class="r-badge" style="background:rgba(0,122,255,.1);color:var(--blue)">✉️ Email</span>`:''}
           ${r.invoice?`<span class="r-badge" style="background:var(--fill2);color:var(--text3)">#${r.invoice}</span>`:''}
           ${r.reconciled?`<span class="r-badge" style="background:rgba(52,199,89,.12);color:var(--accent-dark)">✓ Reconciled</span>`:''}
         </div>
@@ -3779,6 +3828,7 @@ async function exportPDF(){
 /* ── NEW EXPENSE FROM OVERVIEW ── */
 function showNewExpenseSheet(){
   showActionSheet('New expense', [
+    {label:'⚡ Quick add — no photo', action:'showQuickAdd()'},
     {label:'📷 Camera — take photo', action:'overviewCamera()'},
     {label:'🖼️ Photo — from library', action:'document.getElementById(\'ov-file-in\').click()'},
     {label:'📄 PDF — invoice or doc', action:'document.getElementById(\'ov-pdf-in\').click()'},
@@ -3833,6 +3883,216 @@ function overviewPDFChosen(e){
     document.getElementById('api-key-setup').style.display=(getApiKey()||localStorage.getItem('nzrt_role')!=='admin')?'none':'block';
   };
   r.readAsDataURL(f);
+}
+
+/* ── QUICK ADD ── */
+var qaCat='other';
+
+function showQuickAdd(){
+  qaCat='other';
+  // Reset fields
+  document.getElementById('qa-amount').value='';
+  document.getElementById('qa-vendor').value='';
+  document.getElementById('qa-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('qa-gst').value='yes';
+  document.getElementById('qa-notes').value='';
+  document.getElementById('qa-gst-line').textContent='';
+  document.getElementById('qa-ent-warn').style.display='none';
+  // Build category chips
+  buildCats('qa-cat-scroll','other','pickQaCat',true);
+  document.getElementById('quickadd-bg').classList.add('open');
+  setTimeout(()=>{
+    document.getElementById('modal-quickadd').classList.add('open');
+    // Auto-focus amount on open
+    setTimeout(()=>document.getElementById('qa-amount').focus(),350);
+  },10);
+}
+
+function pickQaCat(id){
+  qaCat=id;
+  buildCats('qa-cat-scroll',qaCat,'pickQaCat',true);
+  updateEntWarn('qa-ent-warn',id);
+  qaUpdateGST();
+}
+
+function qaUpdateGST(){
+  const amount=parseFloat(document.getElementById('qa-amount').value)||0;
+  const gstMode=document.getElementById('qa-gst').value;
+  const el=document.getElementById('qa-gst-line');
+  if(amount>0&&gstMode!=='no'){
+    const raw=gstMode==='partial'?amount*(3/23)*0.5:amount*(3/23);
+    el.textContent='GST included: $'+raw.toFixed(2);
+  } else {
+    el.textContent='';
+  }
+}
+
+function saveQuickAdd(){
+  const vendor=document.getElementById('qa-vendor').value.trim();
+  const amount=parseFloat(document.getElementById('qa-amount').value);
+  const date=document.getElementById('qa-date').value;
+  if(!vendor){document.getElementById('qa-vendor').focus();showToast('Enter a vendor name');return;}
+  if(isNaN(amount)||amount<=0){document.getElementById('qa-amount').focus();showToast('Enter an amount');return;}
+  if(!date){showToast('Enter a date');return;}
+
+  // Duplicate check
+  const dupe=checkDuplicate(vendor,amount,date);
+  if(dupe){
+    if(!confirm(`⚠️ Possible duplicate\n\nA receipt from ${vendor} for $${amount.toFixed(2)} already exists (${fmtDate(dupe.date)}).\n\nSave anyway?`)) return;
+  }
+
+  const id=Date.now();
+  receipts.unshift({
+    id, vendor, amount, date,
+    gst: document.getElementById('qa-gst').value,
+    invoice:'', suppgst:'',
+    notes: document.getElementById('qa-notes').value.trim(),
+    reconciled: false,
+    claimPct: null,
+    category: qaCat,
+    image: null,
+    source: 'manual',
+  });
+  save();
+  updateStats();
+  closeModal('quickadd');
+  // If list tab is visible, refresh it
+  if(document.getElementById('p-list').style.display!=='none') renderList();
+  showToast('✓ Saved — '+vendor+' $'+amount.toFixed(2));
+}
+
+/* ── CUSTOM CATEGORIES ── */
+const CAT_COLORS=['#FF6B6B','#FF9F43','#FECA57','#48CAE4','#0077B6','#7B2D8B','#2D6A4F','#E76F51','#457B9D','#6D6875'];
+
+function renderCustomCatsList(){
+  const el=document.getElementById('custom-cats-list');
+  if(!el) return;
+  const custom=settings.customCats||[];
+  if(!custom.length){
+    el.innerHTML='<div style="margin:0 0 8px;padding:10px 16px;font-size:13px;color:var(--text3);">No custom categories yet.</div>';
+    return;
+  }
+  el.innerHTML=custom.map((c,i)=>`
+    <div style="background:var(--surface);border-radius:12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;padding:10px 14px;overflow:hidden;">
+      <div style="width:32px;height:32px;border-radius:8px;background:${c.color}22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${c.icon}</div>
+      <span style="flex:1;font-size:15px;font-weight:500;">${c.label}</span>
+      <div style="width:14px;height:14px;border-radius:4px;background:${c.color};flex-shrink:0;"></div>
+      <button onclick="removeCustomCat(${i})" style="padding:4px 10px;border-radius:8px;border:none;background:rgba(255,59,48,.1);color:var(--red);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">Remove</button>
+    </div>`).join('');
+}
+
+function addCustomCat(){
+  const iconEl=document.getElementById('s-cat-icon');
+  const labelEl=document.getElementById('s-cat-label');
+  const icon=(iconEl.value.trim()||'🏷️');
+  const label=labelEl.value.trim();
+  if(!label){labelEl.focus();showToast('Enter a category name');return;}
+  if(!settings.customCats) settings.customCats=[];
+  // Check for duplicate
+  if(CATS.find(c=>c.label.toLowerCase()===label.toLowerCase())){showToast('Category already exists');return;}
+  const color=CAT_COLORS[settings.customCats.length % CAT_COLORS.length];
+  const id='custom_'+Date.now();
+  settings.customCats.push({id,label,icon,color,entertainment:false,custom:true});
+  iconEl.value='';labelEl.value='';
+  refreshCats();
+  renderCustomCatsList();
+  showToast(icon+' '+label+' added ✓');
+}
+
+function removeCustomCat(idx){
+  if(!settings.customCats||!settings.customCats[idx]) return;
+  const cat=settings.customCats[idx];
+  // Count receipts using this category
+  const inUse=receipts.filter(r=>r.category===cat.id).length;
+  if(inUse>0&&!confirm(`${inUse} receipt${inUse>1?'s are':' is'} using "${cat.label}". They'll show as "Other". Remove anyway?`)) return;
+  settings.customCats.splice(idx,1);
+  refreshCats();
+  renderCustomCatsList();
+}
+
+/* ── EMAIL FORWARDING ── */
+var _emailFwdAddress = '';
+
+async function loadEmailForwardingAddress(){
+  if(!isLoggedIn()) return;
+  const {url} = getSyncConfig();
+  try{
+    const res = await fetch(url+'/email-token', {headers: getAuthHeaders()});
+    if(!res.ok) return;
+    const data = await res.json();
+    _emailFwdAddress = data.address;
+    const el = document.getElementById('email-fwd-address');
+    if(el) el.textContent = data.address;
+  }catch(e){ console.warn('Could not load email token:', e.message); }
+}
+
+function copyEmailAddress(){
+  if(!_emailFwdAddress){ showToast('Address not loaded yet'); return; }
+  navigator.clipboard.writeText(_emailFwdAddress)
+    .then(()=>showToast('Forwarding address copied ✓'))
+    .catch(()=>{
+      // Fallback for iOS PWA
+      const ta = document.createElement('textarea');
+      ta.value = _emailFwdAddress;
+      ta.style.cssText = 'position:fixed;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try{ document.execCommand('copy'); showToast('Forwarding address copied ✓'); }
+      catch{ showToast('Tap and hold to copy: '+_emailFwdAddress); }
+      document.body.removeChild(ta);
+    });
+}
+
+async function regenerateEmailToken(){
+  if(!confirm('Generate a new forwarding address? Your old address will stop working immediately.')) return;
+  const {url} = getSyncConfig();
+  try{
+    const res = await fetch(url+'/email-token/regenerate', {method:'POST', headers: getAuthHeaders()});
+    const data = await res.json();
+    _emailFwdAddress = data.address;
+    const el = document.getElementById('email-fwd-address');
+    if(el) el.textContent = data.address;
+    showToast('New forwarding address generated ✓');
+  }catch(e){ showToast('Error: '+e.message); }
+}
+
+async function showEmailLog(){
+  closeModal('settings');
+  await new Promise(r=>setTimeout(r,300));
+  document.getElementById('emaillog-bg').classList.add('open');
+  setTimeout(()=>document.getElementById('modal-emaillog').classList.add('open'),10);
+  await refreshEmailLog();
+}
+
+async function refreshEmailLog(){
+  const el = document.getElementById('emaillog-list');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;">Loading...</div>';
+  const {url} = getSyncConfig();
+  try{
+    const res = await fetch(url+'/email-log', {headers: getAuthHeaders()});
+    const data = await res.json();
+    if(!data.emails || !data.emails.length){
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;"><div style="font-size:40px;margin-bottom:12px;">✉️</div><div style="font-weight:600;color:var(--text2);">No emails yet</div><div style="font-size:13px;color:var(--text3);margin-top:6px;">Forward a receipt to your address to get started</div></div>';
+      return;
+    }
+    el.innerHTML = data.emails.map(e=>{
+      const ok = e.status==='ok';
+      const date = new Date(e.received_at).toLocaleString('en-NZ',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `<div style="background:var(--surface);border-radius:14px;padding:13px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">
+        <div style="font-size:20px;flex-shrink:0;margin-top:1px;">${ok?'✅':'❌'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.subject||'(no subject)'}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px;">From: ${e.from_addr||'unknown'}</div>
+          <div style="font-size:12px;color:var(--text3);">${date}</div>
+          ${!ok&&e.error?`<div style="font-size:12px;color:var(--red);margin-top:4px;">${e.error}</div>`:''}
+          ${ok&&e.receipt_id?`<div style="font-size:12px;color:var(--accent-dark);margin-top:4px;">Receipt saved ✓</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    el.innerHTML = '<div style="color:var(--red);padding:16px;">Could not reach server</div>';
+  }
 }
 
 /* ── AUTH ── */
@@ -4093,6 +4353,89 @@ document.addEventListener('DOMContentLoaded', async () => {
 <!-- Hidden file inputs for overview capture -->
 <input type="file" id="ov-file-in" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png" onchange="overviewFileChosen(event)" style="display:none">
 <input type="file" id="ov-pdf-in" accept="application/pdf,.pdf" onchange="overviewPDFChosen(event)" style="display:none">
+<!-- QUICK ADD MODAL -->
+<div class="modal-bg" id="quickadd-bg" onclick="closeModal('quickadd')"></div>
+<div class="modal" id="modal-quickadd">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <div style="min-width:60px;"></div>
+    <div class="modal-title">⚡ Quick Add</div>
+    <button class="modal-close" onclick="closeModal('quickadd')">Cancel</button>
+  </div>
+  <div class="modal-inner">
+    <div style="padding:0 0 8px;">
+
+      <!-- Amount — big tap target, centre stage -->
+      <div style="text-align:center;padding:20px 16px 12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Amount</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
+          <span style="font-size:32px;font-weight:300;color:var(--text3);">$</span>
+          <input type="number" id="qa-amount" inputmode="decimal" step="0.01" min="0" placeholder="0.00"
+            style="font-size:48px;font-weight:700;border:none;background:none;outline:none;font-family:inherit;color:var(--text1);width:180px;text-align:center;letter-spacing:-1px;"
+            oninput="qaUpdateGST()">
+        </div>
+        <div id="qa-gst-line" style="font-size:13px;color:var(--orange);margin-top:4px;min-height:18px;"></div>
+      </div>
+
+      <!-- Vendor + Date row -->
+      <div class="g-list" style="margin:0 16px 10px;">
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(0,122,255,.1)">🏪</div>
+          <span class="g-lbl">Vendor</span>
+          <input class="g-input" type="text" id="qa-vendor" placeholder="e.g. Countdown" autocomplete="off">
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(255,149,0,.1)">📅</div>
+          <span class="g-lbl">Date</span>
+          <div style="margin-left:auto;flex-shrink:0;"><input class="g-input" type="date" id="qa-date" style="display:block;"></div>
+        </div>
+        <div class="g-row">
+          <div class="g-icon" style="background:rgba(175,82,222,.1)">🧾</div>
+          <span class="g-lbl">GST</span>
+          <select class="g-select" id="qa-gst" onchange="qaUpdateGST()">
+            <option value="yes">Yes — included</option>
+            <option value="no">No GST</option>
+            <option value="partial">Partial (50%)</option>
+          </select>
+        </div>
+        <div class="g-row g-col">
+          <span style="font-size:13px;color:var(--text3);font-weight:500;">Business purpose <span style="color:var(--text4);font-weight:400;">(optional)</span></span>
+          <textarea class="g-textarea" id="qa-notes" placeholder="What was this for?" rows="2" style="min-height:44px;"></textarea>
+        </div>
+      </div>
+
+      <!-- Category chips — compact horizontal scroll -->
+      <div style="padding:0 16px 6px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;">Category</div>
+      <div class="cat-scroll" id="qa-cat-scroll" style="padding-bottom:12px;"></div>
+
+      <!-- Ent warning -->
+      <div id="qa-ent-warn" class="warn-banner" style="display:none;margin:0 16px 8px;">
+        <span class="warn-icon">⚠️</span>
+        <span class="warn-text"><strong>Entertainment rule:</strong> 50% deductible under NZ tax law.</span>
+      </div>
+
+      <button class="save-btn" onclick="saveQuickAdd()" style="margin-top:4px;">Save Receipt</button>
+      <button style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:13px;border-radius:14px;border:none;background:none;font-family:inherit;font-size:15px;color:var(--blue);cursor:pointer;font-weight:500;" onclick="closeModal('quickadd');goTab('add');">Add photo instead →</button>
+      <div class="pb"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EMAIL LOG MODAL -->
+<div class="modal-bg" id="emaillog-bg" onclick="closeModal('emaillog')"></div>
+<div class="modal" id="modal-emaillog">
+  <div class="modal-handle"></div>
+  <div class="modal-hdr">
+    <span></span>
+    <span class="modal-title">✉️ Email Log</span>
+    <button class="modal-close" onclick="closeModal('emaillog')">Done</button>
+  </div>
+  <div class="modal-inner">
+    <div id="emaillog-list" style="padding:12px 16px;"></div>
+    <div class="pb"></div>
+  </div>
+</div>
+
 <!-- Start trip modal -->
       <div id="gps-start-bg" class="modal-bg" onclick="if(event.target===this)gpsCloseStartModal()">
         <div id="gps-start-modal" class="modal">
