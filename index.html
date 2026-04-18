@@ -829,13 +829,14 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       </div>
     </div>
     <div class="gst-note-box" style="margin:0 16px 12px;" id="sync-status">Not configured — enter your Synology URL and secret to enable automatic backup.</div>
+    </div><!-- end admin-only -->
 
     <div class="shdr">Email forwarding</div>
     <div class="g-list">
       <div class="g-row" style="flex-direction:column;align-items:flex-start;gap:8px;padding:14px 16px;">
         <div style="font-size:13px;color:var(--text2);line-height:1.5;">Forward receipts from your email to this address and they'll be automatically scanned and added to your receipts.</div>
         <div style="display:flex;align-items:center;gap:8px;width:100%;">
-          <div id="email-fwd-address" style="flex:1;font-size:12px;font-family:monospace;color:var(--blue);background:var(--fill2);padding:9px 12px;border-radius:10px;word-break:break-all;min-height:36px;"></div>
+          <div id="email-fwd-address" style="flex:1;font-size:12px;font-family:monospace;color:var(--blue);background:var(--fill2);padding:9px 12px;border-radius:10px;word-break:break-all;min-height:36px;">Loading…</div>
           <button onclick="copyEmailAddress()" style="padding:9px 14px;border-radius:10px;border:none;background:var(--blue);color:white;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;">Copy</button>
         </div>
         <div style="display:flex;gap:8px;width:100%;">
@@ -844,8 +845,8 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         </div>
       </div>
     </div>
-    <div class="gst-note-box" style="margin:0 16px 12px;">Forward email receipts, invoices, or anything with a $ amount to your unique address. Attachments (PDF, JPEG) are scanned too. Requires ANTHROPIC_API_KEY in start.sh.</div>
-    </div><!-- end admin-only -->
+    <div class="gst-note-box" style="margin:0 16px 12px;">Each user gets a unique forwarding address. Forward any receipt email to yours and it'll appear in your receipts automatically.</div>
+
     <div class="shdr">Your business</div>
     <div class="g-list">
       <div class="g-row">
@@ -1839,9 +1840,9 @@ function openSettings(){
     const syncSecretEl=document.getElementById('s-sync-secret');
     if(syncUrlEl) syncUrlEl.value=sc.url;
     if(syncSecretEl) syncSecretEl.value=sc.secret;
-    // Load email forwarding address asynchronously
-    loadEmailForwardingAddress();
   }
+  // Load email forwarding address for all logged-in users
+  if(loggedIn) loadEmailForwardingAddress();
   document.getElementById('s-bizname').value=settings.bizname;
   document.getElementById('s-gstn').value=formatGSTNum(settings.gstn||'');
   document.getElementById('s-gstperiod').value=settings.gstperiod;
@@ -4135,6 +4136,9 @@ function removeCustomCat(idx){
 /* ── EMAIL FORWARDING ── */
 var _emailFwdAddress = '';
 
+// Gmail receipts account — users forward to this with their token as the + tag
+const RECEIPTS_GMAIL = 'Samreceipts2026@gmail.com';
+
 async function loadEmailForwardingAddress(){
   if(!isLoggedIn()) return;
   const {url} = getSyncConfig();
@@ -4142,9 +4146,11 @@ async function loadEmailForwardingAddress(){
     const res = await fetch(url+'/email-token', {headers: getAuthHeaders()});
     if(!res.ok) return;
     const data = await res.json();
-    _emailFwdAddress = data.address;
+    // Show the Gmail + address — this is what users forward receipts to
+    const gmailParts = RECEIPTS_GMAIL.split('@');
+    _emailFwdAddress = gmailParts[0] + '+' + data.token + '@' + gmailParts[1];
     const el = document.getElementById('email-fwd-address');
-    if(el) el.textContent = data.address;
+    if(el) el.textContent = _emailFwdAddress;
   }catch(e){ console.warn('Could not load email token:', e.message); }
 }
 
