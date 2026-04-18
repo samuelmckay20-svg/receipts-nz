@@ -2891,7 +2891,6 @@ function gpsScanOdometer(imgData, callback){
   gpsCompressImage(imgData, function(compressed){
     var base64=compressed.split(',')[1];
     var mediaType='image/jpeg';
-    console.log('gpsScanOdometer: compressed base64 length='+base64.length);
     var prompt1='This vehicle odometer shows the total km travelled. Reply with ONLY the odometer number as digits. Example: 87432';
     var prompt2='Read the main odometer display in this image. Ignore the trip meter. Return ONLY the integer km reading, nothing else.';
     Promise.all([
@@ -2900,7 +2899,6 @@ function gpsScanOdometer(imgData, callback){
     ]).then(function(results){
       gpsHideLoading();
       var a=results[0], b=results[1];
-      console.log('gpsScanOdometer: results a='+a+' b='+b);
       if(a&&b&&Math.abs(a-b)<=2){callback(a);return;}
       if(a&&!b){callback(a);return;}
       if(b&&!a){callback(b);return;}
