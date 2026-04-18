@@ -2828,7 +2828,7 @@ function gpsApiCall(base64, mediaType, prompt){
   var key=getApiKey();
   if(!key) return Promise.resolve(null);
   var body=JSON.stringify({
-    model:'claude-sonnet-4-20250514',
+    model:'claude-sonnet-4-6',
     max_tokens:20,
     messages:[{role:'user',content:[
       {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
