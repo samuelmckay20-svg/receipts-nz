@@ -724,7 +724,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
         <span class="g-lbl">Amount</span>
         <div class="dollar-wrap">
           <span id="e-amount-display" style="font-size:17px;color:var(--text4);margin-left:auto;flex-shrink:0;cursor:text;" onclick="document.getElementById('e-amount').focus()">$0.00</span>
-          <input type="number" id="e-amount" step="0.01" min="0" inputmode="decimal" oninput="updateAmountDisplay('e-amount','e-amount-display')" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+          <input type="number" id="e-amount" step="0.01" min="0" inputmode="decimal" oninput="updateAmountDisplay('e-amount','e-amount-display');calcLiveGSTEdit()" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
         </div>
       </div>
       <div class="g-row">
@@ -735,11 +735,17 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
       <div class="g-row">
         <div class="g-icon" style="background:rgba(175,82,222,.1)">🧾</div>
         <span class="g-lbl">GST</span>
-        <select class="g-select" id="e-gst">
+        <select class="g-select" id="e-gst" onchange="calcLiveGSTEdit()">
           <option value="yes">Yes — included</option>
           <option value="no">No GST</option>
           <option value="partial">Partial (50%)</option>
         </select>
+      </div>
+      <!-- GST calculated amount — mirrors the add form's f-gst-calc-row -->
+      <div class="g-row" id="e-gst-calc-row" style="display:none">
+        <div class="g-icon" style="background:rgba(255,149,0,.06)">🧮</div>
+        <span class="g-lbl" style="color:var(--text3);font-size:13px;">GST included</span>
+        <span id="e-gst-calc" style="font-size:15px;font-weight:600;color:var(--orange);margin-left:auto;">$0.00</span>
       </div>
       <div class="g-row">
         <div class="g-icon" style="background:rgba(88,86,214,.1)">📐</div>
@@ -1349,12 +1355,17 @@ async function loadFromServer(){
 }
 
 function saveLocal(){
-  // Write to localStorage only — no server sync triggered
+  // Write to localStorage — strip image data to keep cache small.
+  // Images live in the in-memory receipts array for display and on the server
+  // for persistence — we don't need them in localStorage too.
   try{
-    localStorage.setItem('nzrt5_r',JSON.stringify(receipts));
+    const receiptsNoImg=receipts.map(r=>r.image?{...r,image:null}:r);
+    localStorage.setItem('nzrt5_r',JSON.stringify(receiptsNoImg));
     localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
     localStorage.setItem('nzrt5_s',JSON.stringify(settings));
-    localStorage.setItem('nzrt5_bin',JSON.stringify(bin));
+    const binNoImg=bin.map(r=>r.image?{...r,image:null}:r);
+    localStorage.setItem('nzrt5_bin',JSON.stringify(binNoImg));
+    // Storage size check — images stripped so this should stay well under 1MB
     try{
       const appKeys=['nzrt5_r','nzrt5_m','nzrt5_s','nzrt5_bin'];
       const used=appKeys.reduce((s,k)=>s+(localStorage.getItem(k)||'').length,0);
@@ -1597,6 +1608,25 @@ function calcLiveGST(){
   // Always update totals
   document.getElementById('rt-expense').textContent='$'+(amount*effectivePct).toFixed(2);
   document.getElementById('rt-gst').textContent='$'+(rawGST*effectivePct).toFixed(2);
+}
+
+function calcLiveGSTEdit(){
+  const amount=parseFloat(document.getElementById('e-amount').value)||0;
+  const gstMode=document.getElementById('e-gst').value;
+  const row=document.getElementById('e-gst-calc-row');
+  const display=document.getElementById('e-gst-calc');
+  if(!row||!display) return;
+  let rawGST=0;
+  if(amount>0&&gstMode!=='no'){
+    if(gstMode==='yes') rawGST=amount*(3/23);
+    else if(gstMode==='partial') rawGST=amount*(3/23)*0.5;
+  }
+  if(amount>0&&rawGST>0){
+    display.textContent='$'+rawGST.toFixed(2);
+    row.style.display='flex';
+  } else {
+    row.style.display='none';
+  }
 }
 
 // NZ IRD/GST numbers: 8 digits = XX-XXX-XXX, 9 digits = XXX-XXX-XXX
@@ -2737,6 +2767,7 @@ function openEdit(id){
   document.getElementById('e-notes').value=r.notes||'';
   buildCats('modal-cat-scroll',editCat,'pickCatEdit',false);
   updateEntWarn('e-ent-warn',editCat);
+  calcLiveGSTEdit();
   if(editImgData)showPreviewEdit();
   else{document.getElementById('modal-prev-wrap').style.display='none';document.getElementById('modal-retake').style.display='none';}
   document.getElementById('modal-bg').classList.add('open');
