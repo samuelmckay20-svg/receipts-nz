@@ -1248,14 +1248,17 @@ async function loadFromServer(){
     if(!res.ok) return false;
     const data=await res.json();
 
+    // Track whether we have local-only items that need uploading
+    let hadLocalOnly=false;
+
     // Merge server data with any local-only entries (added while offline/logged out)
     if(data.receipts){
       const serverIds=new Set(data.receipts.map(r=>r.id));
       const localOnly=receipts.filter(r=>!serverIds.has(r.id));
       receipts=data.receipts;
-      // Prepend local-only entries and sync them up
       if(localOnly.length){
         receipts=[...localOnly,...receipts];
+        hadLocalOnly=true;
         showToast(`Kept ${localOnly.length} offline receipt${localOnly.length>1?'s':''} ✓`);
       }
     }
@@ -1263,7 +1266,7 @@ async function loadFromServer(){
       const serverIds=new Set(data.mileage.map(m=>m.id));
       const localOnly=mileage.filter(m=>!serverIds.has(m.id));
       mileage=data.mileage;
-      if(localOnly.length) mileage=[...localOnly,...mileage];
+      if(localOnly.length){mileage=[...localOnly,...mileage];hadLocalOnly=true;}
     }
     if(data.settings) settings=Object.assign(settings,data.settings);
     if(data.bin) bin=data.bin;
@@ -1275,17 +1278,20 @@ async function loadFromServer(){
       const pending=JSON.parse(pendingR);
       const existing=new Set(receipts.map(r=>r.id));
       const newOnes=pending.filter(r=>!existing.has(r.id));
-      if(newOnes.length){ receipts=[...newOnes,...receipts]; showToast(`Restored ${newOnes.length} offline receipt${newOnes.length>1?'s':''} ✓`); }
+      if(newOnes.length){ receipts=[...newOnes,...receipts]; hadLocalOnly=true; showToast(`Restored ${newOnes.length} offline receipt${newOnes.length>1?'s':''} ✓`); }
       localStorage.removeItem('nzrt_pending_r');
     }
     if(pendingM){
       const pending=JSON.parse(pendingM);
       const existing=new Set(mileage.map(m=>m.id));
-      mileage=[...pending.filter(m=>!existing.has(m.id)),...mileage];
+      const newOnes=pending.filter(m=>!existing.has(m.id));
+      if(newOnes.length){mileage=[...newOnes,...mileage];hadLocalOnly=true;}
       localStorage.removeItem('nzrt_pending_m');
     }
 
-    save(); // persist merged data and sync back to server
+    // Persist to localStorage — only sync back to server if we have new local items to upload
+    saveLocal();
+    if(hadLocalOnly) syncToServer();
     updateStats();
     setSyncStatus('✓ Synced with Synology', true);
     return true;
@@ -1295,18 +1301,18 @@ async function loadFromServer(){
   }
 }
 
-function save(){
+function saveLocal(){
+  // Write to localStorage only — no server sync triggered
   try{
     localStorage.setItem('nzrt5_r',JSON.stringify(receipts));
     localStorage.setItem('nzrt5_m',JSON.stringify(mileage));
     localStorage.setItem('nzrt5_s',JSON.stringify(settings));
     localStorage.setItem('nzrt5_bin',JSON.stringify(bin));
-    // Only warn based on this app's own keys — don't count other sites' data
     try{
       const appKeys=['nzrt5_r','nzrt5_m','nzrt5_s','nzrt5_bin'];
       const used=appKeys.reduce((s,k)=>s+(localStorage.getItem(k)||'').length,0);
       const usedMB=(used*2/1024/1024).toFixed(1);
-      if(used>8*1024*1024){ // warn above ~8MB — server sync means local cache rarely needs to be large
+      if(used>8*1024*1024){
         setSyncStatus(`⚠️ Local cache ${usedMB}MB — tap 🔄 to sync and free space`,false);
       }
     }catch(e){}
@@ -1315,6 +1321,10 @@ function save(){
       showToast('⚠️ Local cache full — tap 🔄 to sync, then the app will free space automatically.');
     }
   }
+}
+
+function save(){
+  saveLocal();
   // Sync to Synology in background — don't await so UI stays fast
   syncToServer();
 }
@@ -1454,6 +1464,32 @@ function updateStats(){
 
 /* ── HELPERS ── */
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+
+function showFieldError(elId, msg){
+  // Show an inline error message below a form field
+  const errId=elId+'-err';
+  let err=document.getElementById(errId);
+  if(!err){
+    err=document.createElement('div');
+    err.id=errId;
+    err.style.cssText='color:var(--red);font-size:12px;font-weight:500;padding:4px 16px 0;';
+    const field=document.getElementById(elId);
+    if(field){
+      // Insert after the field's closest .g-row parent, or after the field itself
+      const row=field.closest('.g-row')||field;
+      row.parentNode.insertBefore(err,row.nextSibling);
+    }
+  }
+  err.textContent=msg;
+  err.style.display='block';
+  // Auto-clear after 4 seconds
+  clearTimeout(err._t);
+  err._t=setTimeout(()=>{err.style.display='none';},4000);
+}
+function clearFieldError(elId){
+  const err=document.getElementById(elId+'-err');
+  if(err) err.style.display='none';
+}
 
 function updateAmountDisplay(inputId, displayId){
   const val=parseFloat(document.getElementById(inputId).value);
@@ -2597,7 +2633,12 @@ function saveReceipt(){
   const vendor=document.getElementById('f-vendor').value.trim();
   const amount=parseFloat(document.getElementById('f-amount').value);
   const date=document.getElementById('f-date').value;
-  if(!vendor||isNaN(amount)||amount<=0||!date){alert('Please enter vendor, amount, and date.');return;}
+  if(!vendor||isNaN(amount)||amount<=0||!date){
+    if(!vendor) showFieldError('f-vendor','Please enter a vendor name');
+    else if(isNaN(amount)||amount<=0) showFieldError('f-amount','Please enter a valid amount');
+    else if(!date) showFieldError('f-date','Please select a date');
+    return;
+  }
 
   // Duplicate detection
   const dupe=checkDuplicate(vendor,amount,date);
@@ -2658,7 +2699,12 @@ function saveEdit(){
   const vendor=document.getElementById('e-vendor').value.trim();
   const amount=parseFloat(document.getElementById('e-amount').value);
   const date=document.getElementById('e-date').value;
-  if(!vendor||isNaN(amount)||amount<=0||!date){alert('Please enter vendor, amount, and date.');return;}
+  if(!vendor||isNaN(amount)||amount<=0||!date){
+    if(!vendor) showFieldError('e-vendor','Please enter a vendor name');
+    else if(isNaN(amount)||amount<=0) showFieldError('e-amount','Please enter a valid amount');
+    else if(!date) showFieldError('e-date','Please select a date');
+    return;
+  }
   const idx=receipts.findIndex(r=>r.id===editId);if(idx===-1)return;
   receipts[idx]={...receipts[idx],vendor,amount,date,
     gst:document.getElementById('e-gst').value,
@@ -3311,7 +3357,11 @@ function saveMileage(){
   const km=parseFloat(kmRaw);
 
   // Require date and from at minimum
-  if(!from||!date){alert('Please enter at least a date and starting point.');return;}
+  if(!from||!date){
+    if(!from) showFieldError('m-from','Please enter a starting point');
+    else if(!date) showFieldError('m-date','Please select a date');
+    return;
+  }
 
   // If only odo start is set, save as an in-progress trip (no km yet)
   const hasOdoStart=odoStart!=='';
@@ -3321,7 +3371,7 @@ function saveMileage(){
 
   // Need km unless it's an in-progress trip
   if(!inProgress&&!hasKm){
-    alert('Please enter the distance, or enter an odometer finish reading to calculate it.');return;
+    showFieldError('m-km','Please enter the distance, or enter an odometer finish reading to calculate it');return;
   }
 
   const finalKm=inProgress?0:km;
