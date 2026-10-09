@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2.2.0">
+<meta name="app-version" content="2.2.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -329,7 +329,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
     </div>
   </div>
   <div class="sum-row" id="sum-row">
-    <div class="sum-card"><div class="sum-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
+    <div class="sum-card"><div class="sum-lbl" id="s-total-lbl">Claimable</div><div class="sum-val green" id="s-total">$0.00</div></div>
     <div class="sum-card"><div class="sum-lbl">GST back</div><div class="sum-val amber" id="s-gst">$0.00</div></div>
     <div class="sum-card"><div class="sum-lbl">Reconciled</div><div class="sum-val" id="s-recon">0/0</div></div>
   </div>
@@ -1098,7 +1098,7 @@ html, body { margin:0; padding:0; overflow:hidden; background:var(--bg); font-fa
 
 <script>
 /* ── VERSION CHECK ── */
-var APP_VERSION='2.2.0';
+var APP_VERSION='2.2.1';
 (function(){
   try{
     var isStandalone=window.navigator.standalone||window.matchMedia('(display-mode: standalone)').matches;
@@ -1500,12 +1500,20 @@ function claimableForReceipt(r){
   return r.amount*claimPctForReceipt(r);
 }
 
+// What you can deduct from income for tax. When GST-registered (a GST# is saved), the GST part
+// comes back through the GST return instead, so it isn't deducted again: amount ex GST × claim %.
+function isGSTRegistered(){ return !!(settings.gstn&&String(settings.gstn).replace(/\D/g,'').length>=8); }
+function deductibleForReceipt(r){
+  return isGSTRegistered() ? claimableForReceipt(r)-gstForReceipt(r) : claimableForReceipt(r);
+}
+
 /* ── STATS ── */
 function updateStats(){
   try{
     const fyR=receipts.filter(r=>{const d=new Date(r.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
-    const claimable=fyR.reduce((s,r)=>s+claimableForReceipt(r),0);
+    const claimable=fyR.reduce((s,r)=>s+deductibleForReceipt(r),0);
     const gst=fyR.reduce((s,r)=>s+gstForReceipt(r),0);
+    const lbl=document.getElementById('s-total-lbl'); if(lbl) lbl.textContent=isGSTRegistered()?'Deductible ex GST':'Claimable';
     const recon=fyR.filter(r=>r.reconciled).length;
     // Include mileage in claimable total
     const fyM=mileage.filter(m=>{const d=new Date(m.date+'T12:00:00');return d>=FY.start&&d<=FY.end;});
@@ -1712,7 +1720,7 @@ function renderOverview(){
 
   var fyR=receipts.filter(function(r){var d=new Date(r.date+'T12:00:00');return d>=selFY.start&&d<=selFY.end;});
   var totalSpend=fyR.reduce(function(s,r){return s+r.amount;},0);
-  var totalClaimable=fyR.reduce(function(s,r){return s+claimableForReceipt(r);},0);
+  var totalClaimable=fyR.reduce(function(s,r){return s+deductibleForReceipt(r);},0);
   var totalGST=fyR.reduce(function(s,r){return s+gstForReceipt(r);},0);
   var recon=fyR.filter(function(r){return r.reconciled;}).length;
   var reconPct=fyR.length?Math.round(recon/fyR.length*100):0;
@@ -1725,7 +1733,7 @@ function renderOverview(){
 
   // Category breakdown for donut — include mileage as its own slice
   var catTotals={};
-  fyR.forEach(function(r){catTotals[r.category]=(catTotals[r.category]||0)+claimableForReceipt(r);});
+  fyR.forEach(function(r){catTotals[r.category]=(catTotals[r.category]||0)+deductibleForReceipt(r);});
   if(mileVal>0) catTotals['_mileage']=mileVal;
   var topCats=Object.entries(catTotals).sort(function(a,b){return b[1]-a[1];});
   var totalWithMileage=totalClaimable+mileVal;
@@ -1741,7 +1749,7 @@ function renderOverview(){
     var mSpend=receipts.filter(function(r){
       var d=new Date(r.date+'T12:00:00');
       return d>=cur&&d<=mEnd;
-    }).reduce(function(s,r){return s+claimableForReceipt(r);},0);
+    }).reduce(function(s,r){return s+deductibleForReceipt(r);},0);
     // Add mileage value for this month
     var mCurCopy=new Date(cur);
     var mEndCopy=new Date(mEnd);
@@ -1933,7 +1941,7 @@ function buildDonutChart(catPairs, total){
 
   // Use CSS custom properties so text adapts to light/dark mode
   var centreLabel=
-    '<text x="'+cx+'" y="'+cy+'" dy="-13" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="var(--text3)" font-family="\'Inter\',sans-serif" font-weight="600" letter-spacing="3">CLAIMABLE</text>'+
+    '<text x="'+cx+'" y="'+cy+'" dy="-13" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="var(--text3)" font-family="\'Inter\',sans-serif" font-weight="600" letter-spacing="3">'+(isGSTRegistered()?'DEDUCTIBLE':'CLAIMABLE')+'</text>'+
     '<text x="'+cx+'" y="'+cy+'" dy="11" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" fill="var(--text1)" font-family="\'Inter\',sans-serif" letter-spacing="-0.5">$'+total.toFixed(2)+'</text>';
 
   return '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;">'+
